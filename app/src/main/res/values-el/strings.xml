@@ -7,8 +7,8 @@
     <string name="push_expires_week">Λήγει σε 7 ημέρες</string>
     <string name="push_expires_today">Λήγει σήμερα</string>
     <string name="push_grew_up_you_title">Χρόνια πολλά για τα 18!</string>
-    <string name="push_grew_up_you">Είσαι πλέον ενήλικας στον οικογενειακό σου χώρο. Τα έγγραφά σου κλειδώθηκαν: ξεκλείδωσε όσα μπορούν να βλέπουν οι γονείς σου.</string>
-    <string name="push_grew_up">Έγινε σήμερα 18 και είναι πλέον ενήλικας. Τα έγγραφά του είναι κλειδωμένα μέχρι να αποφασίσει αλλιώς.</string>
+    <string name="push_grew_up_you">Είσαι πλέον ενήλικας στον οικογενειακό σου χώρο. Οι γονείς σου συνεχίζουν να βλέπουν τα έγγραφά σου μέχρι να κλειδώσεις κάποιο με το PIN σου.</string>
+    <string name="push_grew_up">Έγινε σήμερα 18 και είναι πλέον ενήλικας.</string>
     <string name="push_emergency_asked">Ζήτησε πρόσβαση έκτακτης ανάγκης στα κλειδωμένα έγγραφά σου. Πες όχι στις Ρυθμίσεις πριν περάσει η αναμονή.</string>
     <string name="push_emergency_opened">Άνοιξε τα κλειδωμένα έγγραφά σου με πρόσβαση έκτακτης ανάγκης.</string>
 </resources>

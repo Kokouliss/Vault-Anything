@@ -68,8 +68,8 @@ exports.remindExpiring = europe.pubsub
 const ADULT_AGE = 18;
 
 // Every night, a child whose 18th birthday is today, or went by while this did not run, becomes an
-// adult. Their documents lock at the same time, so the new adult chooses what the parents keep
-// seeing by unlocking them. They are told, and so is the rest of the space.
+// adult. Their documents stay as they are: the parents keep seeing them until the new adult locks
+// one behind their PIN (the owner's choice, 2026-11-25). They are told, and so is the rest of the space.
 exports.comeOfAge = europe.pubsub
   .schedule('every day 00:10')
   .timeZone('Europe/Athens')
@@ -83,8 +83,6 @@ exports.comeOfAge = europe.pubsub
       const members = space.get('members') || {};
       for (const [id, member] of Object.entries(members)) {
         if (member.role === 'adult' || typeof member.birthDay !== 'number' || birthdayAt(member.birthDay, ADULT_AGE) > today) continue;
-        const theirs = await space.ref.collection('documents').where('ownerId', '==', id).get();
-        await Promise.all(theirs.docs.map((document) => document.ref.update({ locked: true })));
         await db.batch()
           .update(space.ref, new FieldPath('members', id, 'role'), 'adult')
           .create(space.ref.collection('activity').doc(), {

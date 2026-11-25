@@ -2,4 +2,8 @@
 <resources>
     <string name="setup_needed_title">Χρειάζεται ρύθμιση</string>
     <string name="setup_needed_body">Αυτή η έκδοση δεν έχει ρυθμίσεις Firebase. Πρόσθεσε το αρχείο app/google-services.json όπως περιγράφει το README και φτιάξε ξανά την εφαρμογή.</string>
+    <string name="channel_reminders">Υπενθυμίσεις εγγράφων</string>
+    <string name="push_expires_month">Λήγει σε 30 ημέρες</string>
+    <string name="push_expires_week">Λήγει σε 7 ημέρες</string>
+    <string name="push_expires_today">Λήγει σήμερα</string>
 </resources>

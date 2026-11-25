@@ -2,6 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Google's QR scanner locks its hidden helper screen to portrait, which would make Play hide the app from landscape-only devices. -->
     <uses-feature
@@ -48,6 +49,23 @@
                     android:scheme="https" />
             </intent-filter>
         </activity>
+
+        <!-- How a reminder sent by firebase/functions looks. The channel is created in VaultAnythingApplication. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="reminders" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/core_ui_ic_event" />
+
+        <!-- Shows the reminders from firebase/functions that arrive while the app is open. -->
+        <service
+            android:name=".PushService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
 
         <!-- Fetches the QR scanner screen when the app is installed, so the first scan does not wait for it. -->
         <meta-data

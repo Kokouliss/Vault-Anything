@@ -1,9 +1,13 @@
 package com.kokouliss.vaultanything.feature.documents
 
+import android.app.Activity
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.widget.Toast
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -60,6 +64,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.selection.toggleable
 import androidx.core.content.FileProvider
+import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kokouliss.vaultanything.core.domain.model.DocumentCategory
 import com.kokouliss.vaultanything.core.domain.model.MAX_TITLE_LENGTH
@@ -79,6 +86,9 @@ import java.time.format.FormatStyle
 
 private const val MILLIS_PER_DAY = 86_400_000L
 
+/** Pages in one scan. A thicker contract is better kept as the PDF its sender mailed. */
+private const val MAX_SCAN_PAGES = 20
+
 @Composable
 internal fun EditDocumentRoute(viewModel: EditDocumentViewModel, onBack: () -> Unit, onSaved: () -> Unit) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -94,6 +104,10 @@ internal fun EditDocumentRoute(viewModel: EditDocumentViewModel, onBack: () -> U
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.setFile(uri.toString(), context.displayName(uri))
     }
+    val activity = LocalActivity.current
+    val scanner = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        GmsDocumentScanningResult.fromActivityResultIntent(result.data)?.pdf?.uri?.let { viewModel.setFile(it.toString(), "scan.pdf") }
+    }
     // A shared file comes without its name; the picker's name is looked up the same way.
     LaunchedEffect(uiState.attachment) {
         val file = uiState.attachment as? Attachment.File
@@ -103,6 +117,7 @@ internal fun EditDocumentRoute(viewModel: EditDocumentViewModel, onBack: () -> U
     EditDocumentScreen(
         uiState = uiState,
         onBack = onBack,
+        onScan = { activity?.let { startScan(it, scanner::launch) } },
         onTakePhoto = { camera.launch(captureUri) },
         onChooseFile = { picker.launch(arrayOf("*/*")) },
         onPasteLink = { viewModel.setLink("") },
@@ -117,6 +132,20 @@ internal fun EditDocumentRoute(viewModel: EditDocumentViewModel, onBack: () -> U
         onOwnerChange = viewModel::setOwner,
         onSave = viewModel::save,
     )
+}
+
+/** Opens Google's scanner, which finds the edges of each page and hands back one PDF of them all. */
+private fun startScan(activity: Activity, onReady: (IntentSenderRequest) -> Unit) {
+    val options = GmsDocumentScannerOptions.Builder()
+        .setGalleryImportAllowed(true)
+        .setPageLimit(MAX_SCAN_PAGES)
+        .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_PDF)
+        .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_BASE_WITH_FILTER)
+        .build()
+    GmsDocumentScanning.getClient(options).getStartScanIntent(activity)
+        .addOnSuccessListener { onReady(IntentSenderRequest.Builder(it).build()) }
+        // The scanner lives in Google Play services, not in the app, so a phone without them has none.
+        .addOnFailureListener { Toast.makeText(activity, R.string.feature_documents_scan_unavailable, Toast.LENGTH_LONG).show() }
 }
 
 /** Where the camera app writes a new picture. */
@@ -142,6 +171,7 @@ private fun Context.displayName(uri: Uri): String {
 internal fun EditDocumentScreen(
     uiState: EditDocumentUiState,
     onBack: () -> Unit,
+    onScan: () -> Unit,
     onTakePhoto: () -> Unit,
     onChooseFile: () -> Unit,
     onPasteLink: () -> Unit,
@@ -187,7 +217,7 @@ internal fun EditDocumentScreen(
                         )
                     }
                     if (uiState.isNew) {
-                        AttachmentPicker(uiState, onTakePhoto, onChooseFile, onPasteLink, onClearAttachment, onLinkChange)
+                        AttachmentPicker(uiState, onScan, onTakePhoto, onChooseFile, onPasteLink, onClearAttachment, onLinkChange)
                     } else {
                         // What the document is stays as it was; only the words around it change.
                         val existing = uiState.existingFileName ?: (uiState.attachment as? Attachment.Link)?.text
@@ -321,6 +351,7 @@ internal fun EditDocumentScreen(
 @Composable
 private fun AttachmentPicker(
     uiState: EditDocumentUiState,
+    onScan: () -> Unit,
     onTakePhoto: () -> Unit,
     onChooseFile: () -> Unit,
     onPasteLink: () -> Unit,
@@ -331,7 +362,11 @@ private fun AttachmentPicker(
         null -> {
             Text(stringResource(R.string.feature_documents_attachment_needed), style = MaterialTheme.typography.bodyLarge)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onTakePhoto) {
+                Button(onClick = onScan) {
+                    AppIcon(AppIcons.Document, null, Modifier.padding(end = 8.dp))
+                    Text(stringResource(R.string.feature_documents_scan_paper))
+                }
+                OutlinedButton(onClick = onTakePhoto) {
                     AppIcon(AppIcons.Camera, null, Modifier.padding(end = 8.dp))
                     Text(stringResource(R.string.feature_documents_take_photo))
                 }
@@ -401,6 +436,7 @@ private fun EditDocumentScreenPreview() {
                 owners = listOf(Member("u1", "Panos"), Member("u3", "Nikos")),
             ),
             onBack = {},
+            onScan = {},
             onTakePhoto = {},
             onChooseFile = {},
             onPasteLink = {},

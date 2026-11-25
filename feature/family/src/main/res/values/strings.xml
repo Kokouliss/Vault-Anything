@@ -34,6 +34,9 @@
     <string name="feature_family_documents_empty_title">No documents yet</string>
     <string name="feature_family_documents_empty_body">Keep passports, cards, results, contracts and links here. Adults see everyone\'s documents; children see only their own.</string>
     <string name="feature_family_nothing_here">Nothing here yet.</string>
+    <string name="feature_family_nothing_found">Nothing found for “%1$s”.</string>
+    <string name="feature_family_search_hint">Search documents</string>
+    <string name="feature_family_search_clear">Clear search</string>
     <string name="feature_family_everyone">Everyone</string>
     <string name="feature_family_all">All</string>
     <string name="feature_family_favorites">Favorites</string>

@@ -93,6 +93,17 @@ class SpaceDetailViewModelTest {
     }
 
     @Test
+    fun `search narrows the list by title, case aside, and says when nothing matches`() = runTest {
+        val viewModel = viewModel(User("u1", "Panos", null))
+        viewModel.uiState.test {
+            viewModel.search("PASS")
+            assertThat((expectMostRecentItem() as SpaceDetailUiState.Ready).documents).containsExactly(passport)
+            viewModel.search("nothing like this")
+            assertThat((expectMostRecentItem() as SpaceDetailUiState.Ready).documents).isEmpty()
+        }
+    }
+
+    @Test
     fun `a member who left takes their filter with them`() = runTest {
         val viewModel = viewModel(User("u1", "Panos", null))
         viewModel.uiState.test {

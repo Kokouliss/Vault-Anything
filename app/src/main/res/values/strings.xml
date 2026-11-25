@@ -3,4 +3,9 @@
     <string name="app_name" translatable="false">Vault Anything</string>
     <string name="setup_needed_title">Setup needed</string>
     <string name="setup_needed_body">This build has no Firebase configuration. Add the file app/google-services.json as described in the README and build the app again.</string>
+    <string name="channel_reminders">Document reminders</string>
+    <!-- Named by remindExpiring in firebase/functions; PushService maps the names to these strings. -->
+    <string name="push_expires_month">Runs out in 30 days</string>
+    <string name="push_expires_week">Runs out in 7 days</string>
+    <string name="push_expires_today">Runs out today</string>
 </resources>

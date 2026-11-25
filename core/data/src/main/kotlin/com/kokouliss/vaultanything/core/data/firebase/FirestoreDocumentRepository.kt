@@ -3,6 +3,7 @@ package com.kokouliss.vaultanything.core.data.firebase
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.Blob
 import com.google.firebase.firestore.FieldValue
@@ -35,6 +36,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
@@ -43,6 +45,7 @@ internal class FirestoreDocumentRepository @Inject constructor(
     private val db: FirebaseFirestore,
     private val storage: FirebaseStorage,
     private val thumbnails: Thumbnails,
+    private val textReader: TextReader,
     @ApplicationContext private val context: Context,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     @ApplicationScope private val applicationScope: CoroutineScope,
@@ -93,6 +96,10 @@ internal class FirestoreDocumentRepository @Inject constructor(
                     .putFile(uri, storageMetadata { contentType = picked.mimeType })
                     .await()
                 document.update(Fields.UPLOADED, true).logFailure("mark the file uploaded")
+                // The words come later: reading them takes seconds the person need not wait for.
+                applicationScope.launch {
+                    textReader.of(uri, picked.mimeType)?.let { text -> document.update(Fields.TEXT, text).logFailure("save the words of the file") }
+                }
                 AddResult.Added(document.id)
             } catch (e: FirebaseFirestoreException) {
                 AddResult.Failed
@@ -189,7 +196,10 @@ internal class FirestoreDocumentRepository @Inject constructor(
         }
         return PickedFile(
             name = safeFileName(name ?: uri.lastPathSegment),
-            mimeType = resolver.getType(uri) ?: "application/octet-stream",
+            mimeType = resolver.getType(uri)
+                // A file of the app's own, such as a scan, has no provider to ask: its name says what it is.
+                ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(MimeTypeMap.getFileExtensionFromUrl(uri.toString()))
+                ?: "application/octet-stream",
             sizeBytes = size ?: return null,
         )
     }

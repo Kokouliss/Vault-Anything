@@ -77,6 +77,7 @@ dependencies {
     implementation(libs.androidx.navigation3.ui)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.crashlytics)
+    implementation(libs.firebase.messaging)
 
     testImplementation(libs.bundles.unit.test)
 }

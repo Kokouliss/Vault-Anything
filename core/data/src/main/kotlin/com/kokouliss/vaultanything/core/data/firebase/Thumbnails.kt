@@ -45,13 +45,29 @@ internal class Thumbnails @Inject constructor(
         }
     }
 
-    private fun renderFirstPage(uri: Uri): Bitmap? =
-        context.contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
-            PdfRenderer(descriptor).use { renderer ->
-                if (renderer.pageCount == 0) return null
-                renderer.openPage(0).use { page ->
-                    val (width, height) = fitWithin(page.width, page.height, MAX_PX)
-                    Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also {
+    private fun renderFirstPage(uri: Uri): Bitmap? = context.renderPdfPages(uri, maxPages = 1, longestPx = MAX_PX).firstOrNull()
+
+    private companion object {
+        const val MAX_PX = 240
+        const val QUALITY = 70
+    }
+}
+
+/**
+ * Blocking. The first [maxPages] pages of a PDF, drawn on paper-white bitmaps whose longer side is
+ * [longestPx]. Throws for a file that is not a readable PDF, or is locked with a password.
+ */
+internal fun Context.renderPdfPages(uri: Uri, maxPages: Int, longestPx: Int): List<Bitmap> =
+    contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
+        PdfRenderer(descriptor).use { renderer ->
+            List(minOf(renderer.pageCount, maxPages)) { index ->
+                renderer.openPage(index).use { page ->
+                    val scale = longestPx.toFloat() / max(page.width, page.height)
+                    Bitmap.createBitmap(
+                        (page.width * scale).roundToInt().coerceAtLeast(1),
+                        (page.height * scale).roundToInt().coerceAtLeast(1),
+                        Bitmap.Config.ARGB_8888,
+                    ).also {
                         // A page is drawn over whatever is in the bitmap, so start from paper.
                         it.eraseColor(Color.WHITE)
                         page.render(it, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
@@ -59,12 +75,7 @@ internal class Thumbnails @Inject constructor(
                 }
             }
         }
-
-    private companion object {
-        const val MAX_PX = 240
-        const val QUALITY = 70
-    }
-}
+    } ?: emptyList()
 
 /** Scales [width] x [height] down so the longer side is at most [maxPx]. Never scales up. */
 internal fun fitWithin(width: Int, height: Int, maxPx: Int): Pair<Int, Int> {

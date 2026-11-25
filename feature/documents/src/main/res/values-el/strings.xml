@@ -21,6 +21,8 @@
     <string name="feature_documents_add_title">Προσθήκη εγγράφου</string>
     <string name="feature_documents_edit_title">Επεξεργασία εγγράφου</string>
     <string name="feature_documents_attachment_needed">Πρόσθεσε μια φωτογραφία, ένα αρχείο ή έναν σύνδεσμο.</string>
+    <string name="feature_documents_scan_paper">Σάρωση χαρτιού</string>
+    <string name="feature_documents_scan_unavailable">Η σάρωση χρειάζεται τις υπηρεσίες Google Play, που λείπουν από αυτό το κινητό ή θέλουν ενημέρωση.</string>
     <string name="feature_documents_take_photo">Φωτογραφία</string>
     <string name="feature_documents_choose_file">Επιλογή αρχείου</string>
     <string name="feature_documents_paste_link">Επικόλληση συνδέσμου</string>

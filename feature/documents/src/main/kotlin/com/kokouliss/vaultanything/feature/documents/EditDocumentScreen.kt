@@ -140,7 +140,8 @@ private fun startScan(activity: Activity, onReady: (IntentSenderRequest) -> Unit
         .setGalleryImportAllowed(true)
         .setPageLimit(MAX_SCAN_PAGES)
         .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_PDF)
-        .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_BASE_WITH_FILTER)
+        // The full mode also wipes shadows and a finger off the page, and gets Google's later improvements.
+        .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
         .build()
     GmsDocumentScanning.getClient(options).getStartScanIntent(activity)
         .addOnSuccessListener { onReady(IntentSenderRequest.Builder(it).build()) }

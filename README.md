@@ -5,7 +5,7 @@ A family document vault for Android. Create a family space, invite the others, a
 - **Spaces** hold a family. Each member keeps their own documents in it.
 - **Adults and children.** Adults see everyone's documents and look after the children's. Children see only their own. Whoever creates the space is an adult; whoever joins starts as a child until an adult in the space says otherwise, in the members list.
 - **Documents** are a photo, a scan, a file of any kind (up to 25 MB) or a web link, with a title, a category (Identity, Health, Home, Car, School, Finance, Other), tags, a note and a date it stops being valid.
-- **Scan paper** finds the edges of each page with the camera, straightens it and makes one PDF of up to 20 pages. The words on a scan or a photo are read on the phone, so **search** finds a paper by what it says, as well as by its title, tags and note.
+- **Scan paper** finds the edges of each page with the camera, straightens it, cleans shadows and fingers off it and makes one PDF of up to 20 pages. The words on a scan or a photo are read on the phone, so **search** finds a paper by what it says, as well as by its title, tags and note.
 - **Expiring soon** sits on top of the family's page: everything that runs out within three months, soonest first. A **reminder** arrives on the phone 30 days before a document runs out, 7 days before, and on the day, to the owner and to the adults of the space.
 - **Favorites** come first in the list, and have a filter of their own, like each category and each member.
 - **Open, share, print.** A document opens in the app the phone uses for it, goes through the share sheet to email, messaging apps, nearby phones and printers, and pictures and PDFs print straight from the app.

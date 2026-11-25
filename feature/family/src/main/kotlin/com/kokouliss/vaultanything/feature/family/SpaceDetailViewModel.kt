@@ -12,6 +12,8 @@ import com.kokouliss.vaultanything.core.domain.model.normalizeEmail
 import com.kokouliss.vaultanything.core.domain.model.sortedForDisplay
 import com.kokouliss.vaultanything.core.domain.repository.AuthRepository
 import com.kokouliss.vaultanything.core.domain.repository.DocumentRepository
+import com.kokouliss.vaultanything.core.domain.repository.LockRepository
+import com.kokouliss.vaultanything.core.domain.repository.PinResult
 import com.kokouliss.vaultanything.core.domain.repository.SpaceRepository
 import com.kokouliss.vaultanything.core.ui.component.Undoable
 import dagger.assisted.Assisted
@@ -50,14 +52,30 @@ internal sealed interface SpaceDetailUiState {
     data class Ready(
         val space: Space,
         val currentUserId: String,
-        /** Every document this member may see: all of them for an adult, their own for a child. */
+        /**
+         * Every document this member sees right now: everyone's unlocked ones for an adult, their
+         * own for a child, and the locked ones that were opened on this phone.
+         */
         val allDocuments: List<Document>,
         val filter: DocumentFilter = DocumentFilter(),
         /** Days since 1970, so "expires in 12 days" is counted from the same day everywhere. */
         val today: Long = LocalDate.now().toEpochDay(),
+        /** This member's own documents, the locked ones too, whether shown or not. */
+        val ownDocuments: List<Document> = emptyList(),
+        /** The members whose locked documents are open on this phone right now. */
+        val unlockedOwners: Set<String> = emptySet(),
+        val hasPin: Boolean = false,
     ) : SpaceDetailUiState {
         val isOwner: Boolean get() = space.ownerId == currentUserId
         val isAdult: Boolean get() = space.isAdult(currentUserId)
+
+        val lockedOwnCount: Int get() = ownDocuments.count { it.isLocked }
+
+        /** Own locked documents wait behind the PIN or the phone's lock. Without a PIN there is nothing to ask for. */
+        val ownLockedHidden: Boolean get() = lockedOwnCount > 0 && hasPin && currentUserId !in unlockedOwners
+
+        /** Nothing to show, and nothing waiting behind the PIN either. */
+        val isEmpty: Boolean get() = allDocuments.isEmpty() && lockedOwnCount == 0
 
         /** The members whose documents this member may look at: the family for an adult, themselves for a child. */
         val visibleMembers get() = space.visibleMembers(currentUserId)
@@ -83,8 +101,9 @@ internal sealed interface SpaceDetailUiState {
 internal class SpaceDetailViewModel @AssistedInject constructor(
     @Assisted private val key: SpaceDetailKey,
     private val spaceRepository: SpaceRepository,
-    documentRepository: DocumentRepository,
+    private val documentRepository: DocumentRepository,
     authRepository: AuthRepository,
+    private val lockRepository: LockRepository,
 ) : ViewModel() {
 
     private val filter = MutableStateFlow(DocumentFilter())
@@ -102,20 +121,46 @@ internal class SpaceDetailViewModel @AssistedInject constructor(
         if (member == null) flowOf(emptyList()) else documentRepository.observeDocuments(key.spaceId, member.first, member.second)
     }
 
+    // The locked documents of other members opened on this phone. The server sends them only while
+    // the unlock lasts; their own locked documents come with the query above.
+    private val lockedOfOthers = combine(authRepository.currentUser, lockRepository.unlockedOwners) { user, owners -> owners - setOfNotNull(user?.id) }
+        .distinctUntilChanged()
+        .flatMapLatest { owners ->
+            if (owners.isEmpty()) {
+                flowOf(emptyList())
+            } else {
+                combine(owners.map { documentRepository.observeLockedDocuments(key.spaceId, it) }) { lists -> lists.flatMap { it } }
+            }
+        }
+
+    private class Content(val documents: List<Document>, val lockedOfOthers: List<Document>, val unlocked: Set<String>, val hasPin: Boolean)
+
+    private val content = combine(documents, lockedOfOthers, lockRepository.unlockedOwners, lockRepository.hasPin) { d, l, u, h -> Content(d, l, u, h) }
+
     val uiState: StateFlow<SpaceDetailUiState> = combine(
         space,
-        documents,
+        content,
         authRepository.currentUser,
         cancelledInvites.pending,
         filter,
-    ) { space, documents, user, cancelled, filter ->
+    ) { space, content, user, cancelled, filter ->
         if (space == null || user == null) {
             SpaceDetailUiState.Gone
         } else {
             val invited = space.invitedEmails.filter { it != cancelled?.removal }
             // A member who left takes their filter with them.
             val kept = if (filter.memberId != null && space.member(filter.memberId) == null) filter.copy(memberId = null) else filter
-            SpaceDetailUiState.Ready(space.copy(invitedEmails = invited), user.id, documents, kept)
+            // A locked document shows once its owner's PIN was given on this phone. One's own show without a PIN to ask for.
+            val shown = content.documents.filter { !it.isLocked || it.ownerId in content.unlocked || (it.ownerId == user.id && !content.hasPin) }
+            SpaceDetailUiState.Ready(
+                space = space.copy(invitedEmails = invited),
+                currentUserId = user.id,
+                allDocuments = (shown + content.lockedOfOthers).distinctBy { it.id },
+                filter = kept,
+                ownDocuments = content.documents.filter { it.ownerId == user.id },
+                unlockedOwners = content.unlocked,
+                hasPin = content.hasPin,
+            )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SpaceDetailUiState.Loading)
 
@@ -128,6 +173,21 @@ internal class SpaceDetailViewModel @AssistedInject constructor(
     fun showFavorites() = filter.update { it.copy(category = null, favoritesOnly = true) }
 
     fun search(query: String) = filter.update { it.copy(query = query) }
+
+    /** Puts every document of the signed-in member behind their PIN, or takes them all out. */
+    fun setAllLocked(locked: Boolean) {
+        val own = (uiState.value as? SpaceDetailUiState.Ready)?.ownDocuments ?: return
+        viewModelScope.launch { own.filter { it.isLocked != locked }.forEach { documentRepository.setLocked(it, locked) } }
+    }
+
+    /** Checks [ownerId]'s PIN with the server. Ok shows their locked documents here for a while. */
+    suspend fun unlock(ownerId: String, pin: String): PinResult = lockRepository.unlock(key.spaceId, ownerId, pin)
+
+    /** The phone confirmed it is the person: their own locked documents show. */
+    fun unlockSelf() = lockRepository.unlockSelf()
+
+    /** An adult gives a child of the space a new PIN. */
+    suspend fun resetPin(memberId: String, pin: String): PinResult = lockRepository.resetPin(key.spaceId, memberId, pin)
 
     fun renameSpace(name: String) {
         viewModelScope.launch { spaceRepository.renameSpace(key.spaceId, name) }

@@ -51,5 +51,19 @@
     <string name="feature_auth_delete_account_confirm_text_password">Φεύγεις από όλους τους χώρους και τα έγγραφά σου διαγράφονται μαζί σου. Ένας χώρος χωρίς άλλο μέλος διαγράφεται. Ένας χώρος που μοιράζεσαι συνεχίζει χωρίς εσένα· αν είσαι ο ιδιοκτήτης, ιδιοκτήτης γίνεται ο επόμενος ενήλικας. Θα γράψεις τον κωδικό σου άλλη μία φορά.</string>
     <string name="feature_auth_confirm_its_you">Επιβεβαίωσε ότι είσαι εσύ</string>
     <string name="feature_auth_delete_account_failed_password">Η διαγραφή δεν έγινε. Έλεγξε τη σύνδεσή σου και τον κωδικό σου.</string>
+    <string name="feature_auth_pin_section">PIN εγγράφων</string>
+    <string name="feature_auth_set_pin">Ορισμός PIN</string>
+    <string name="feature_auth_set_pin_hint">Κλείδωσε ένα έγγραφο πίσω από αυτό. Οι άλλοι ενήλικες στους χώρους σου χρειάζονται τότε το PIN για να το δουν, όπως κι εσύ.</string>
+    <string name="feature_auth_change_pin">Αλλαγή PIN</string>
+    <string name="feature_auth_remove_pin">Αφαίρεση PIN</string>
+    <string name="feature_auth_remove_pin_hint">Τα κλειδωμένα έγγραφά σου μένουν μόνο δικά σου μέχρι να τα ξεκλειδώσεις.</string>
+    <string name="feature_auth_forgot_pin">Ξέχασες το PIN σου;</string>
+    <string name="feature_auth_forgot_pin_hint">Επιβεβαίωσε ότι είσαι εσύ και διάλεξε ένα νέο.</string>
+    <string name="feature_auth_confirm_failed">Δεν επιβεβαιώθηκε ότι είσαι εσύ. Έλεγξε τη σύνδεσή σου και ότι διάλεξες τον ίδιο λογαριασμό Google.</string>
+    <string name="feature_auth_confirm_failed_password">Δεν επιβεβαιώθηκε ότι είσαι εσύ. Έλεγξε τη σύνδεσή σου και τον κωδικό σου.</string>
+    <string name="feature_auth_current_pin">Τρέχον PIN</string>
+    <string name="feature_auth_new_pin">Νέο PIN</string>
+    <string name="feature_auth_next">Επόμενο</string>
+    <string name="feature_auth_remove">Αφαίρεση</string>
     <string name="feature_auth_maker">AnyKind Apps</string>
 </resources>

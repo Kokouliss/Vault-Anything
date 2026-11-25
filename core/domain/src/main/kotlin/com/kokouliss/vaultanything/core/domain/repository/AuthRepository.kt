@@ -46,6 +46,16 @@ interface AuthRepository {
     suspend fun deleteAccountWithPassword(password: String): Boolean
 
     /**
+     * Signs in again without leaving, with a fresh Google [idToken], so that the server takes the
+     * next few minutes as a fresh sign-in: that is what replaces a forgotten PIN. False when the
+     * token belongs to another account or the server could not be reached.
+     */
+    suspend fun confirmIdentity(idToken: String): Boolean
+
+    /** As [confirmIdentity], for an email and password account. */
+    suspend fun confirmIdentityWithPassword(password: String): Boolean
+
+    /**
      * True right after a new Google account signs in, whose name came from Google: the person may
      * pick another one. Back to false once they save a name or [keepName].
      */

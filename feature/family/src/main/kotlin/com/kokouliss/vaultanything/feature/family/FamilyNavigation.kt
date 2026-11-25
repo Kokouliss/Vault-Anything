@@ -13,12 +13,17 @@ data object SpacesKey : NavKey
 @Serializable
 data class SpaceDetailKey(val spaceId: String) : NavKey
 
+/** Who added, opened and deleted what in a space. For adults. */
+@Serializable
+data class ActivityKey(val spaceId: String) : NavKey
+
 fun EntryProviderScope<NavKey>.familyEntries(
     onOpenSpace: (spaceId: String) -> Unit,
     onOpenDocument: (spaceId: String, documentId: String) -> Unit,
     /** Adds a document for [ownerId], the member whose documents are being looked at. */
     onAddDocument: (spaceId: String, ownerId: String) -> Unit,
     onOpenProfile: () -> Unit,
+    onOpenActivity: (spaceId: String) -> Unit,
     onBack: () -> Unit,
     /** The space was deleted or access to it ended: the screen closes and [message] goes on the one below. */
     onGone: (message: String) -> Unit,
@@ -48,6 +53,13 @@ fun EntryProviderScope<NavKey>.familyEntries(
             onGone = onGone,
             notice = notice,
             onNoticeShown = onNoticeShown,
+            onOpenActivity = { onOpenActivity(key.spaceId) },
+        )
+    }
+    entry<ActivityKey> { key ->
+        ActivityRoute(
+            viewModel = hiltViewModel<ActivityViewModel, ActivityViewModel.Factory> { it.create(key) },
+            onBack = onBack,
         )
     }
 }

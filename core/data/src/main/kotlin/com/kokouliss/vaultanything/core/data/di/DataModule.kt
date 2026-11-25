@@ -2,13 +2,18 @@ package com.kokouliss.vaultanything.core.data.di
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.storage.FirebaseStorage
 import com.kokouliss.vaultanything.core.data.firebase.FirebaseAuthRepository
+import com.kokouliss.vaultanything.core.data.firebase.FirestoreActivityRepository
 import com.kokouliss.vaultanything.core.data.firebase.FirestoreDocumentRepository
+import com.kokouliss.vaultanything.core.data.firebase.FirestoreLockRepository
 import com.kokouliss.vaultanything.core.data.firebase.FirestoreSpaceRepository
+import com.kokouliss.vaultanything.core.domain.repository.ActivityRepository
 import com.kokouliss.vaultanything.core.domain.repository.AuthRepository
 import com.kokouliss.vaultanything.core.domain.repository.DocumentRepository
+import com.kokouliss.vaultanything.core.domain.repository.LockRepository
 import com.kokouliss.vaultanything.core.domain.repository.SpaceRepository
 import dagger.Binds
 import dagger.Module
@@ -47,6 +52,12 @@ internal abstract class DataModule {
     @Singleton
     abstract fun bindDocumentRepository(impl: FirestoreDocumentRepository): DocumentRepository
 
+    @Binds
+    abstract fun bindActivityRepository(impl: FirestoreActivityRepository): ActivityRepository
+
+    @Binds
+    abstract fun bindLockRepository(impl: FirestoreLockRepository): LockRepository
+
     companion object {
         @Provides
         @Singleton
@@ -63,6 +74,11 @@ internal abstract class DataModule {
         @Provides
         @Singleton
         fun provideMessaging(): FirebaseMessaging = FirebaseMessaging.getInstance()
+
+        /** The region the functions in firebase/functions run in. */
+        @Provides
+        @Singleton
+        fun provideFunctions(): FirebaseFunctions = FirebaseFunctions.getInstance("europe-west1")
 
         @Provides
         @IoDispatcher

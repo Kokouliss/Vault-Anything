@@ -11,6 +11,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.MetadataChanges
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.QuerySnapshot
 import com.google.firebase.firestore.snapshots
 import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.StorageException
@@ -18,10 +19,12 @@ import com.google.firebase.storage.StorageReference
 import com.google.firebase.storage.storageMetadata
 import com.kokouliss.vaultanything.core.data.di.ApplicationScope
 import com.kokouliss.vaultanything.core.data.di.IoDispatcher
+import com.kokouliss.vaultanything.core.domain.model.ActivityAction
 import com.kokouliss.vaultanything.core.domain.model.Document
 import com.kokouliss.vaultanything.core.domain.model.DocumentDetails
 import com.kokouliss.vaultanything.core.domain.model.DocumentKind
 import com.kokouliss.vaultanything.core.domain.model.MAX_FILE_BYTES
+import com.kokouliss.vaultanything.core.domain.model.MAX_TITLE_LENGTH
 import com.kokouliss.vaultanything.core.domain.repository.AddResult
 import com.kokouliss.vaultanything.core.domain.repository.DocumentRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -34,6 +37,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -46,21 +50,39 @@ internal class FirestoreDocumentRepository @Inject constructor(
     private val storage: FirebaseStorage,
     private val thumbnails: Thumbnails,
     private val textReader: TextReader,
+    private val activity: FirestoreActivityRepository,
     @ApplicationContext private val context: Context,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     @ApplicationScope private val applicationScope: CoroutineScope,
 ) : DocumentRepository {
 
     override fun observeDocuments(spaceId: String, userId: String, isAdult: Boolean): Flow<List<Document>> {
-        // The rules allow a child to list only their own documents, so the query says so.
-        val query: Query = if (isAdult) documents(spaceId) else documents(spaceId).whereEqualTo(Fields.OWNER_ID, userId)
-        // With metadata changes, so a document says when its change has reached the cloud.
-        return query.snapshots(MetadataChanges.INCLUDE)
-            .map { snapshot -> snapshot.documents.mapNotNull { it.toDocument(spaceId) } }
-            .distinctUntilChanged()
-            // Being removed from the space, or made a child, ends the listener with "permission denied".
-            .catch { e -> if (e is FirebaseFirestoreException) emit(emptyList()) else throw e }
+        // The rules allow a child to list only their own documents, and an adult everyone's unlocked
+        // ones, so the queries say so: a wider one is refused as a whole.
+        val own = documents(spaceId).whereEqualTo(Fields.OWNER_ID, userId).listen(spaceId) { snapshot ->
+            // A document from before locks existed has no field, which the rules treat as locked for
+            // everyone else. Its owner's phone sets it straight.
+            snapshot.documents.filter { !it.contains(Fields.LOCKED) }.forEach { it.reference.update(Fields.LOCKED, false).logFailure("mark unlocked") }
+        }
+        if (!isAdult) return own
+        val unlocked = documents(spaceId).whereEqualTo(Fields.LOCKED, false).listen(spaceId)
+        return combine(own, unlocked) { mine, theirs -> (mine + theirs).distinctBy { it.id } }
     }
+
+    override fun observeLockedDocuments(spaceId: String, ownerId: String): Flow<List<Document>> =
+        documents(spaceId).whereEqualTo(Fields.OWNER_ID, ownerId).whereEqualTo(Fields.LOCKED, true).listen(spaceId)
+
+    /** The documents of [this] query as they change. [onSnapshot] sees each raw snapshot first. */
+    private fun Query.listen(spaceId: String, onSnapshot: (QuerySnapshot) -> Unit = {}): Flow<List<Document>> =
+        // With metadata changes, so a document says when its change has reached the cloud.
+        snapshots(MetadataChanges.INCLUDE)
+            .map { snapshot ->
+                onSnapshot(snapshot)
+                snapshot.documents.mapNotNull { it.toDocument(spaceId) }
+            }
+            .distinctUntilChanged()
+            // Being removed from the space, made a child or an unlock running out ends the listener with "permission denied".
+            .catch { e -> if (e is FirebaseFirestoreException) emit(emptyList()) else throw e }
 
     override fun observeDocument(spaceId: String, documentId: String): Flow<Document?> =
         documents(spaceId).document(documentId).snapshots(MetadataChanges.INCLUDE)
@@ -70,6 +92,7 @@ internal class FirestoreDocumentRepository @Inject constructor(
     override suspend fun addLink(spaceId: String, ownerId: String, title: String, link: String, details: DocumentDetails): String {
         val document = documents(spaceId).document()
         document.set(newDocument(ownerId, title, DocumentKind.LINK, details) + (Fields.LINK to link)).logFailure("add link")
+        activity.log(spaceId, ActivityAction.ADDED, Document(document.id, spaceId, ownerId, title, DocumentKind.LINK, details))
         return document.id
     }
 
@@ -96,6 +119,7 @@ internal class FirestoreDocumentRepository @Inject constructor(
                     .putFile(uri, storageMetadata { contentType = picked.mimeType })
                     .await()
                 document.update(Fields.UPLOADED, true).logFailure("mark the file uploaded")
+                activity.log(spaceId, ActivityAction.ADDED, Document(document.id, spaceId, ownerId, title, kind, details))
                 // The words come later: reading them takes seconds the person need not wait for.
                 applicationScope.launch {
                     textReader.of(uri, picked.mimeType)?.let { text -> document.update(Fields.TEXT, text).logFailure("save the words of the file") }
@@ -124,10 +148,28 @@ internal class FirestoreDocumentRepository @Inject constructor(
         documents(spaceId).document(documentId).update(Fields.FAVORITE, favorite).logFailure("mark favorite")
     }
 
+    override suspend fun setLocked(document: Document, locked: Boolean) {
+        documents(document.spaceId).document(document.id).update(Fields.LOCKED, locked).logFailure("lock document")
+    }
+
+    override suspend fun suggestTitle(sourceUri: String): String? {
+        val uri = Uri.parse(sourceUri)
+        return withContext(ioDispatcher) {
+            val mimeType = describe(uri)?.mimeType ?: return@withContext null
+            textReader.of(uri, mimeType)?.lineSequence()
+                .orEmpty()
+                .map { it.trim() }
+                // A line of a few letters is a page number or a stray mark, not a title.
+                .firstOrNull { line -> line.count(Char::isLetterOrDigit) >= 3 }
+                ?.take(MAX_TITLE_LENGTH)
+        }
+    }
+
     override suspend fun delete(document: Document) {
         // The file in Storage is removed by cleanUpDocument in firebase/functions, which also
         // covers a delete made offline.
         documents(document.spaceId).document(document.id).delete().logFailure("delete document")
+        activity.log(document.spaceId, ActivityAction.DELETED, document)
         withContext(ioDispatcher) { cacheFile(document).delete() }
     }
 
@@ -159,6 +201,7 @@ internal class FirestoreDocumentRepository @Inject constructor(
             Fields.OWNER_ID to ownerId,
             Fields.TITLE to title,
             Fields.KIND to kind.key,
+            Fields.LOCKED to false,
             Fields.ADDED_BY_ID to user.uid,
             Fields.ADDED_BY_NAME to user.memberName,
             Fields.CREATED_AT to FieldValue.serverTimestamp(),

@@ -82,4 +82,27 @@
     <string name="feature_family_remove_member">Αφαίρεση: %1$s</string>
     <string name="feature_family_remove_member_confirm_text">%1$s χάνει την πρόσβαση σε αυτόν τον χώρο και τα έγγραφά του μέσα σε αυτόν διαγράφονται. Ο κωδικός πρόσκλησης αλλάζει, ώστε ο παλιός να μην μπορεί να χρησιμοποιηθεί ξανά.</string>
     <string name="feature_family_remove">Αφαίρεση</string>
+
+    <plurals name="feature_family_locked_own">
+        <item quantity="one">%d κλειδωμένο έγγραφό σου</item>
+        <item quantity="other">%d κλειδωμένα έγγραφά σου</item>
+    </plurals>
+    <string name="feature_family_locked_of">Κλειδωμένα έγγραφα: %1$s</string>
+    <string name="feature_family_locked">Κλειδωμένο</string>
+    <string name="feature_family_unlock_prompt">Άνοιγμα των κλειδωμένων εγγράφων σου</string>
+    <string name="feature_family_your_pin">Το PIN σου</string>
+    <string name="feature_family_pin_of">PIN: %1$s</string>
+    <string name="feature_family_lock_all">Κλείδωμα όλων των εγγράφων μου</string>
+    <string name="feature_family_unlock_all">Ξεκλείδωμα όλων των εγγράφων μου</string>
+    <string name="feature_family_reset_pin">Νέο PIN για: %1$s</string>
+    <string name="feature_family_new_pin_for">Νέο PIN για %1$s</string>
+    <string name="feature_family_reset">Ορισμός</string>
+    <string name="feature_family_pin_reset_done">%1$s έχει νέο PIN.</string>
+    <string name="feature_family_activity">Δραστηριότητα</string>
+    <string name="feature_family_activity_empty_title">Τίποτα ακόμη</string>
+    <string name="feature_family_activity_empty_body">Ποιος πρόσθεσε, άνοιξε ή διέγραψε ένα έγγραφο φαίνεται εδώ, για τους ενήλικες του χώρου.</string>
+    <string name="feature_family_activity_added">%1$s πρόσθεσε: %2$s</string>
+    <string name="feature_family_activity_opened">%1$s άνοιξε: %2$s</string>
+    <string name="feature_family_activity_deleted">%1$s διέγραψε: %2$s</string>
+    <string name="feature_family_activity_pin_reset">%1$s έδωσε νέο PIN σε %2$s</string>
 </resources>

@@ -9,6 +9,13 @@
     <string name="core_ui_undo">Undo</string>
     <string name="core_ui_at_limit">Character limit: %1$d</string>
     <string name="core_ui_error_generic">Something went wrong. Check your connection and try again.</string>
+    <string name="core_ui_unlock">Unlock</string>
+    <string name="core_ui_pin">PIN</string>
+    <string name="core_ui_pin_hint">4 to 8 digits</string>
+    <string name="core_ui_pin_wrong">Wrong PIN.</string>
+    <string name="core_ui_pin_too_many_tries">Too many wrong tries. Wait 15 minutes and try again.</string>
+    <string name="core_ui_pin_no_pin">This person has no PIN, so nothing of theirs is locked.</string>
+    <string name="core_ui_pin_needs_sign_in">Confirm it is you first, from your profile page.</string>
 
     <!-- The categories a document is kept under. -->
     <string name="core_ui_category_identity">Identity</string>

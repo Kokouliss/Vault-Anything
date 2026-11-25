@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kokouliss.vaultanything.core.domain.model.User
 import com.kokouliss.vaultanything.core.domain.repository.AuthRepository
+import com.kokouliss.vaultanything.core.domain.repository.LockRepository
+import com.kokouliss.vaultanything.core.domain.repository.PinResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,7 +21,19 @@ internal enum class DeleteState { Idle, Deleting, Failed }
 @HiltViewModel
 internal class ProfileViewModel @Inject constructor(
     private val authRepository: AuthRepository,
+    private val lockRepository: LockRepository,
 ) : ViewModel() {
+
+    val hasPin: StateFlow<Boolean> = lockRepository.hasPin.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    suspend fun setPin(pin: String, current: String?): PinResult = lockRepository.setPin(pin, current)
+
+    suspend fun removePin(current: String): PinResult = lockRepository.removePin(current)
+
+    /** [idToken] is null when Google did not hand over a fresh sign-in token. */
+    suspend fun confirmIdentity(idToken: String?): Boolean = idToken != null && authRepository.confirmIdentity(idToken)
+
+    suspend fun confirmIdentityWithPassword(password: String): Boolean = authRepository.confirmIdentityWithPassword(password)
 
     /** Null for a moment while loading, and again right after signing out, when the app leaves this screen. */
     val user: StateFlow<User?> = authRepository.currentUser

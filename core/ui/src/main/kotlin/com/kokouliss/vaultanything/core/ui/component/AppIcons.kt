@@ -47,6 +47,8 @@ object AppIcons {
     val Folder = R.drawable.core_ui_ic_folder
     val Person = R.drawable.core_ui_ic_person
     val Lock = R.drawable.core_ui_ic_lock
+    val LockOpen = R.drawable.core_ui_ic_lock_open
+    val History = R.drawable.core_ui_ic_history
 }
 
 /** Pass null as [contentDescription] only when the icon sits next to text that says the same. */

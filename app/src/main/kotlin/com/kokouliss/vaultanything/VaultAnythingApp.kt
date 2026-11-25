@@ -42,6 +42,7 @@ import com.kokouliss.vaultanything.feature.documents.DocumentDetailKey
 import com.kokouliss.vaultanything.feature.documents.EditDocumentKey
 import com.kokouliss.vaultanything.feature.documents.ShareKey
 import com.kokouliss.vaultanything.feature.documents.documentsEntries
+import com.kokouliss.vaultanything.feature.family.ActivityKey
 import com.kokouliss.vaultanything.feature.family.SpaceDetailKey
 import com.kokouliss.vaultanything.feature.family.SpacesKey
 import com.kokouliss.vaultanything.feature.family.familyEntries
@@ -148,6 +149,7 @@ private fun SignedInNavigation(launch: Launch, onLaunchHandled: () -> Unit) {
                 onOpenDocument = { spaceId, documentId -> backStack.add(DocumentDetailKey(spaceId, documentId)) },
                 onAddDocument = { spaceId, ownerId -> backStack.add(EditDocumentKey(spaceId, ownerId = ownerId)) },
                 onOpenProfile = { backStack.add(ProfileKey) },
+                onOpenActivity = { spaceId -> backStack.add(ActivityKey(spaceId)) },
                 onBack = goBack,
                 onGone = onGone,
                 notice = notice,

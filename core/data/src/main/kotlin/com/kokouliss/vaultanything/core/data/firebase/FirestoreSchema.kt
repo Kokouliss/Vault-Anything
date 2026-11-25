@@ -6,6 +6,8 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.DocumentSnapshot.ServerTimestampBehavior
+import com.kokouliss.vaultanything.core.domain.model.ActivityAction
+import com.kokouliss.vaultanything.core.domain.model.ActivityEntry
 import com.kokouliss.vaultanything.core.domain.model.Document
 import com.kokouliss.vaultanything.core.domain.model.DocumentCategory
 import com.kokouliss.vaultanything.core.domain.model.DocumentDetails
@@ -27,7 +29,13 @@ import kotlinx.coroutines.flow.distinctUntilChangedBy
 // invites/{inviteCode}                     spaceId
 // spaces/{spaceId}/documents/{documentId}  ownerId: whose document it is; title, kind (file|image|link), category, tags[], favorite,
 //                                          expiresDay?, note?, link?, fileName?, mimeType?, sizeBytes?, uploaded?, thumbnail? (JPEG bytes),
-//                                          addedById, addedByName, createdAt, updatedAt
+//                                          text?, locked, addedById, addedByName, createdAt, updatedAt
+//                                          locked: behind the owner's PIN. Other adults see it only with an unlock (below).
+// spaces/{spaceId}/activity/{entryId}      at, actorId, actorName, action (added|opened|deleted|pin_reset), documentId?, documentTitle?,
+//                                          memberId?, memberName?. Read by adults; written by the member it is about, pin_reset by functions.
+// spaces/{spaceId}/unlocks/{memberId}      grants {ownerId: until}. Written by verifyPin in firebase/functions, read by the rules only.
+// users/{uid}                              hasPin. Written by setPin in firebase/functions; the PIN's hash sits under users/{uid}/private/lock,
+//                                          which no phone reads.
 // users/{uid}/tokens/{token}               updatedAt. One per device that gets this person's notifications.
 //
 // The file of a document is in Cloud Storage at spaces/{spaceId}/documents/{documentId}/{fileName}.
@@ -38,6 +46,7 @@ internal object Collections {
     const val DOCUMENTS = "documents"
     const val USERS = "users"
     const val TOKENS = "tokens"
+    const val ACTIVITY = "activity"
 }
 
 internal object Fields {
@@ -65,8 +74,18 @@ internal object Fields {
     const val UPLOADED = "uploaded"
     const val THUMBNAIL = "thumbnail"
     const val TEXT = "text"
+    const val LOCKED = "locked"
     const val ADDED_BY_ID = "addedById"
     const val ADDED_BY_NAME = "addedByName"
+    const val HAS_PIN = "hasPin"
+    const val AT = "at"
+    const val ACTOR_ID = "actorId"
+    const val ACTOR_NAME = "actorName"
+    const val ACTION = "action"
+    const val DOCUMENT_ID = "documentId"
+    const val DOCUMENT_TITLE = "documentTitle"
+    const val MEMBER_ID = "memberId"
+    const val MEMBER_NAME = "memberName"
 }
 
 internal fun DocumentSnapshot.toSpace(): Space? {
@@ -114,11 +133,27 @@ internal fun DocumentSnapshot.toDocument(spaceId: String): Document? {
         isUploaded = getBoolean(Fields.UPLOADED) != false,
         thumbnail = getBlob(Fields.THUMBNAIL)?.let { ImageData(it.toBytes()) },
         text = getString(Fields.TEXT),
+        isLocked = getBoolean(Fields.LOCKED) == true,
         addedByName = getString(Fields.ADDED_BY_NAME).orEmpty(),
         // A just-added document has no server time yet; the estimate keeps it on top of the list.
         createdAtMillis = getTimestamp(Fields.CREATED_AT, ServerTimestampBehavior.ESTIMATE)?.toDate()?.time ?: 0L,
         updatedAtMillis = getTimestamp(Fields.UPDATED_AT, ServerTimestampBehavior.ESTIMATE)?.toDate()?.time ?: 0L,
         isPending = metadata.hasPendingWrites(),
+    )
+}
+
+internal fun DocumentSnapshot.toActivityEntry(): ActivityEntry? {
+    val action = ActivityAction.fromKey(getString(Fields.ACTION)) ?: return null
+    return ActivityEntry(
+        id = id,
+        atMillis = getTimestamp(Fields.AT, ServerTimestampBehavior.ESTIMATE)?.toDate()?.time ?: 0L,
+        actorId = getString(Fields.ACTOR_ID).orEmpty(),
+        actorName = getString(Fields.ACTOR_NAME).orEmpty(),
+        action = action,
+        documentId = getString(Fields.DOCUMENT_ID),
+        documentTitle = getString(Fields.DOCUMENT_TITLE),
+        memberId = getString(Fields.MEMBER_ID),
+        memberName = getString(Fields.MEMBER_NAME),
     )
 }
 

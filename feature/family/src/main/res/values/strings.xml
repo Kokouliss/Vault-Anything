@@ -82,4 +82,27 @@
     <string name="feature_family_remove_member">Remove %1$s</string>
     <string name="feature_family_remove_member_confirm_text">%1$s loses access to this space and their documents in it are deleted. The invite code changes so the old one cannot be used to rejoin.</string>
     <string name="feature_family_remove">Remove</string>
+
+    <plurals name="feature_family_locked_own">
+        <item quantity="one">%d locked document of yours</item>
+        <item quantity="other">%d locked documents of yours</item>
+    </plurals>
+    <string name="feature_family_locked_of">%1$s\'s locked documents</string>
+    <string name="feature_family_locked">Locked</string>
+    <string name="feature_family_unlock_prompt">Open your locked documents</string>
+    <string name="feature_family_your_pin">Your PIN</string>
+    <string name="feature_family_pin_of">PIN of %1$s</string>
+    <string name="feature_family_lock_all">Lock all my documents</string>
+    <string name="feature_family_unlock_all">Unlock all my documents</string>
+    <string name="feature_family_reset_pin">Reset the PIN of %1$s</string>
+    <string name="feature_family_new_pin_for">New PIN for %1$s</string>
+    <string name="feature_family_reset">Reset</string>
+    <string name="feature_family_pin_reset_done">%1$s has a new PIN.</string>
+    <string name="feature_family_activity">Activity</string>
+    <string name="feature_family_activity_empty_title">Nothing yet</string>
+    <string name="feature_family_activity_empty_body">Who added, opened or deleted a document shows up here, for the adults of the space.</string>
+    <string name="feature_family_activity_added">%1$s added %2$s</string>
+    <string name="feature_family_activity_opened">%1$s opened %2$s</string>
+    <string name="feature_family_activity_deleted">%1$s deleted %2$s</string>
+    <string name="feature_family_activity_pin_reset">%1$s gave %2$s a new PIN</string>
 </resources>

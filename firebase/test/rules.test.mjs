@@ -5,6 +5,7 @@ import { after, before, beforeEach, test } from 'node:test';
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import {
   Bytes,
+  Timestamp,
   arrayRemove,
   arrayUnion,
   collection,
@@ -13,6 +14,8 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
+  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -28,6 +31,9 @@ const DOCUMENTS = `${SPACE}/documents`;
 const OWNERS_PASSPORT = `${DOCUMENTS}/d1`;
 const KIDS_REPORT = `${DOCUMENTS}/d2`;
 const MEMBERS_TEST = `${DOCUMENTS}/d3`;
+const OWNERS_SECRET = `${DOCUMENTS}/d4`;
+const KIDS_SECRET = `${DOCUMENTS}/d5`;
+const ACTIVITY = `${SPACE}/activity`;
 
 let env;
 
@@ -41,7 +47,7 @@ before(async () => {
 after(() => env.cleanup());
 
 // A space owned by "owner" (adult) with another adult "member" and a child "kid", one pending email
-// invite, and one document of each person.
+// invite, one document of each person, and a locked document of the owner and of the kid.
 beforeEach(async () => {
   await env.clearFirestore();
   await env.withSecurityRulesDisabled(async (context) => {
@@ -59,11 +65,13 @@ beforeEach(async () => {
     await setDoc(doc(db, OWNERS_PASSPORT), stored('owner', 'Passport'));
     await setDoc(doc(db, KIDS_REPORT), stored('kid', 'School report'));
     await setDoc(doc(db, MEMBERS_TEST), stored('member', 'Blood test'));
+    await setDoc(doc(db, OWNERS_SECRET), stored('owner', 'Test result', { locked: true }));
+    await setDoc(doc(db, KIDS_SECRET), stored('kid', 'Diary', { locked: true }));
   });
 });
 
 /** A file document as the server holds it. */
-function stored(ownerId, title) {
+function stored(ownerId, title, extra = {}) {
   return {
     ownerId,
     title,
@@ -77,11 +85,20 @@ function stored(ownerId, title) {
     mimeType: 'application/pdf',
     sizeBytes: 1000,
     uploaded: true,
+    locked: false,
     addedById: ownerId,
     addedByName: 'Someone',
     createdAt: new Date(),
     updatedAt: new Date(),
+    ...extra,
   };
+}
+
+/** What verifyPin in functions/index.js writes once `viewer` gave `ownerId`'s PIN. */
+function unlock(viewer, ownerId, millisFromNow = 60_000) {
+  return env.withSecurityRulesDisabled((context) =>
+    setDoc(doc(context.firestore(), `${SPACE}/unlocks/${viewer}`), { grants: { [ownerId]: Timestamp.fromMillis(Date.now() + millisFromNow) } }),
+  );
 }
 
 /** A new file document as the app writes it. */
@@ -303,17 +320,102 @@ test('only the owner can delete the space', async () => {
   await assertSucceeds(remove(owner()));
 });
 
-test("adults list everyone's documents, children only their own, with the queries the app uses", async () => {
+test("adults list everyone's unlocked documents, children only their own, with the queries the app uses", async () => {
   const all = (db) => getDocs(collection(db, DOCUMENTS));
+  const unlocked = (db) => getDocs(query(collection(db, DOCUMENTS), where('locked', '==', false)));
   const own = (db, uid) => getDocs(query(collection(db, DOCUMENTS), where('ownerId', '==', uid)));
-  await assertSucceeds(all(owner()));
-  await assertSucceeds(all(member()));
-  await assertFails(all(kid()));
+  // Everything at once could include a locked document of someone else, so the app never asks for it.
+  await assertFails(all(owner()));
+  await assertSucceeds(unlocked(owner()));
+  await assertSucceeds(unlocked(member()));
+  await assertFails(unlocked(kid()));
+  await assertSucceeds(own(owner(), 'owner'));
   await assertSucceeds(own(kid(), 'kid'));
   await assertFails(own(kid(), 'owner'));
   await assertFails(all(stranger()));
   await assertFails(getDoc(doc(kid(), OWNERS_PASSPORT)));
   await assertSucceeds(getDoc(doc(owner(), KIDS_REPORT)));
+});
+
+test("a locked document is seen by its owner, and by an adult who gave its owner's PIN a short while ago", async () => {
+  const lockedOf = (db, ownerId) => getDocs(query(collection(db, DOCUMENTS), where('ownerId', '==', ownerId), where('locked', '==', true)));
+  await assertSucceeds(getDoc(doc(owner(), OWNERS_SECRET)));
+  await assertSucceeds(getDoc(doc(kid(), KIDS_SECRET)));
+  await assertSucceeds(lockedOf(kid(), 'kid'));
+  await assertFails(getDoc(doc(member(), OWNERS_SECRET)));
+  await assertFails(getDoc(doc(owner(), KIDS_SECRET)));
+  await assertFails(lockedOf(owner(), 'kid'));
+  await assertFails(getDoc(doc(kid(), OWNERS_SECRET)));
+
+  await unlock('owner', 'kid');
+  await assertSucceeds(getDoc(doc(owner(), KIDS_SECRET)));
+  await assertSucceeds(lockedOf(owner(), 'kid'));
+  // One owner at a time, and an unlock given to a child reaches nothing.
+  await assertFails(lockedOf(owner(), 'member'));
+  await unlock('kid', 'owner');
+  await assertFails(getDoc(doc(kid(), OWNERS_SECRET)));
+
+  await unlock('member', 'owner', -1);
+  await assertFails(getDoc(doc(member(), OWNERS_SECRET)));
+  await unlock('member', 'owner');
+  await assertSucceeds(getDoc(doc(member(), OWNERS_SECRET)));
+});
+
+test('only the owner locks or unlocks a document, and a document from before locks still edits', async () => {
+  await assertSucceeds(setDoc(doc(owner(), `${DOCUMENTS}/l1`), newFile('owner', 'owner', { locked: true })));
+  await assertSucceeds(setDoc(doc(kid(), `${DOCUMENTS}/l2`), newFile('kid', 'kid', { locked: true })));
+  await assertFails(setDoc(doc(owner(), `${DOCUMENTS}/l3`), newFile('kid', 'owner', { locked: true })));
+  await assertSucceeds(setDoc(doc(owner(), `${DOCUMENTS}/l4`), newFile('kid', 'owner', { locked: false })));
+  await assertFails(setDoc(doc(owner(), `${DOCUMENTS}/l5`), newFile('owner', 'owner', { locked: 'yes' })));
+
+  await assertSucceeds(updateDoc(doc(owner(), OWNERS_PASSPORT), { locked: true }));
+  await assertSucceeds(updateDoc(doc(owner(), OWNERS_SECRET), { locked: false }));
+  await assertFails(updateDoc(doc(owner(), KIDS_REPORT), { locked: true }));
+  await assertFails(updateDoc(doc(owner(), KIDS_SECRET), { locked: false }));
+  // An adult editing a child's document writes locked: false along, which changes nothing.
+  await assertSucceeds(updateDoc(doc(owner(), KIDS_REPORT), { title: 'Report card', locked: false, updatedAt: serverTimestamp() }));
+  await assertSucceeds(updateDoc(doc(kid(), KIDS_REPORT), { locked: true }));
+
+  // A document from before locks existed has no field: its owner sees it and marks it unlocked the
+  // next time their app lists it; until then an adult's read of it is refused rather than let through.
+  const OLD = `${DOCUMENTS}/old`;
+  await env.withSecurityRulesDisabled((context) => {
+    const { locked, ...old } = stored('kid', 'Drawing');
+    return setDoc(doc(context.firestore(), OLD), old);
+  });
+  await assertSucceeds(getDoc(doc(kid(), OLD)));
+  await assertFails(getDoc(doc(owner(), OLD)));
+  await assertSucceeds(updateDoc(doc(kid(), OLD), { locked: false }));
+  await assertSucceeds(getDoc(doc(owner(), OLD)));
+});
+
+test('members log what they did with a document, adults read the log, and nothing in it changes', async () => {
+  const entry = (actorId, extra = {}) => ({ at: serverTimestamp(), actorId, actorName: 'Someone', action: 'opened', documentId: 'd1', documentTitle: 'Passport', ...extra });
+  await assertSucceeds(setDoc(doc(member(), `${ACTIVITY}/a1`), entry('member')));
+  await assertSucceeds(setDoc(doc(kid(), `${ACTIVITY}/a2`), entry('kid', { action: 'added' })));
+  await assertFails(setDoc(doc(kid(), `${ACTIVITY}/a3`), entry('owner')));
+  await assertFails(setDoc(doc(member(), `${ACTIVITY}/a4`), entry('member', { action: 'hacked' })));
+  await assertFails(setDoc(doc(member(), `${ACTIVITY}/a5`), entry('member', { at: new Date(0) })));
+  // PIN resets come from firebase/functions only.
+  await assertFails(setDoc(doc(member(), `${ACTIVITY}/a6`), entry('member', { action: 'pin_reset', memberId: 'kid', memberName: 'Kid' })));
+  await assertFails(setDoc(doc(stranger(), `${ACTIVITY}/a7`), entry('stranger')));
+
+  const log = (db) => getDocs(query(collection(db, ACTIVITY), orderBy('at', 'desc'), limit(100)));
+  await assertSucceeds(log(owner()));
+  await assertSucceeds(log(member()));
+  await assertFails(log(kid()));
+  await assertFails(log(stranger()));
+  await assertFails(updateDoc(doc(member(), `${ACTIVITY}/a1`), { action: 'added' }));
+  await assertFails(deleteDoc(doc(owner(), `${ACTIVITY}/a1`)));
+});
+
+test('a person reads whether they have a PIN, and nothing else about PINs or unlocks', async () => {
+  await assertSucceeds(getDoc(doc(owner(), 'users/owner')));
+  await assertFails(getDoc(doc(member(), 'users/owner')));
+  await assertFails(setDoc(doc(owner(), 'users/owner'), { hasPin: true }));
+  await assertFails(getDoc(doc(owner(), 'users/owner/private/lock')));
+  await unlock('owner', 'kid');
+  await assertFails(getDoc(doc(owner(), `${SPACE}/unlocks/owner`)));
 });
 
 test('a member adds documents for themselves, an adult also for a child, nobody for another adult', async () => {

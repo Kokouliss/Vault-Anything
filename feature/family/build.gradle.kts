@@ -8,6 +8,7 @@ android {
 }
 
 dependencies {
+    implementation(libs.androidx.activity.compose)
     implementation(libs.google.play.services.code.scanner)
     implementation(libs.kotlinx.serialization)
     implementation(libs.zxing.core)

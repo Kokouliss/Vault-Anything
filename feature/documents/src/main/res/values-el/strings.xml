@@ -16,6 +16,15 @@
     <string name="feature_documents_belongs_to">Έγγραφο: %1$s</string>
     <string name="feature_documents_added_by">Το πρόσθεσε: %1$s</string>
     <string name="feature_documents_expires_on">Ισχύει έως %1$s</string>
+    <string name="feature_documents_lock">Κλείδωμα</string>
+    <string name="feature_documents_remove_lock">Αφαίρεση κλειδώματος</string>
+    <string name="feature_documents_locked_title">Κλειδωμένο</string>
+    <string name="feature_documents_locked_body">Μόνο εσύ μπορείς να το ανοίξεις: με το PIN σου, ή με το δακτυλικό σου αποτύπωμα, το πρόσωπό σου ή το κλείδωμα οθόνης.</string>
+    <string name="feature_documents_unlock_prompt">Άνοιγμα του κλειδωμένου εγγράφου σου</string>
+    <string name="feature_documents_your_pin">Το PIN σου</string>
+    <string name="feature_documents_words">Λέξεις πάνω του</string>
+    <string name="feature_documents_copy_words">Αντιγραφή των λέξεων</string>
+    <string name="feature_documents_copied">Αντιγράφηκε</string>
     <string name="feature_documents_note">Σημείωση</string>
 
     <string name="feature_documents_add_title">Προσθήκη εγγράφου</string>

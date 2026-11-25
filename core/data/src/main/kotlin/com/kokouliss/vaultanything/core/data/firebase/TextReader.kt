@@ -10,6 +10,9 @@ import com.kokouliss.vaultanything.core.domain.model.MAX_TEXT_LENGTH
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.IOException
 import javax.inject.Inject
+import javax.inject.Singleton
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
 
 /**
@@ -18,14 +21,24 @@ import kotlinx.coroutines.tasks.await
  */
 // shortcut: the model reads Latin letters and numbers, so Greek words come out wrong. For Greek,
 // send the pages to a cloud reader from firebase/functions instead.
+@Singleton
 internal class TextReader @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
+    private val oneAtATime = Mutex()
+
+    /** The last file read and its words: a new document is read for its title first and for search right after. */
+    private var last: Pair<Uri, String?>? = null
+
     /**
      * Call it off the main thread: the PDF pages are drawn before they are read. Null for a file
      * that is not a picture or a PDF, cannot be read, or has no words on it.
      */
-    suspend fun of(uri: Uri, mimeType: String?): String? {
+    suspend fun of(uri: Uri, mimeType: String?): String? = oneAtATime.withLock {
+        last?.takeIf { it.first == uri }?.second ?: read(uri, mimeType).also { last = uri to it }
+    }
+
+    private suspend fun read(uri: Uri, mimeType: String?): String? {
         val pages = try {
             when {
                 mimeType?.startsWith("image/") == true -> listOf(InputImage.fromFilePath(context, uri))

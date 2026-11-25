@@ -8,6 +8,13 @@
     <string name="core_ui_loading">Φόρτωση</string>
     <string name="core_ui_undo">Αναίρεση</string>
     <string name="core_ui_at_limit">Όριο χαρακτήρων: %1$d</string>
+    <string name="core_ui_unlock">Ξεκλείδωμα</string>
+    <string name="core_ui_pin">PIN</string>
+    <string name="core_ui_pin_hint">4 έως 8 ψηφία</string>
+    <string name="core_ui_pin_wrong">Λάθος PIN.</string>
+    <string name="core_ui_pin_too_many_tries">Πολλές λάθος προσπάθειες. Περίμενε 15 λεπτά και δοκίμασε ξανά.</string>
+    <string name="core_ui_pin_no_pin">Αυτό το άτομο δεν έχει PIN, άρα δεν έχει κλειδωμένα έγγραφα.</string>
+    <string name="core_ui_pin_needs_sign_in">Επιβεβαίωσε πρώτα ότι είσαι εσύ, από τη σελίδα του προφίλ σου.</string>
     <string name="core_ui_error_generic">Κάτι πήγε στραβά. Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.</string>
 
     <string name="core_ui_category_identity">Ταυτότητα</string>

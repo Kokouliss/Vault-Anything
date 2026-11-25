@@ -25,6 +25,12 @@ interface DocumentRepository {
      */
     fun observeDocuments(spaceId: String, userId: String, isAdult: Boolean): Flow<List<Document>>
 
+    /**
+     * The locked documents of another member, [ownerId], once `LockRepository.unlock` opened them
+     * for a while. Empty again when that runs out, or when the server refuses.
+     */
+    fun observeLockedDocuments(spaceId: String, ownerId: String): Flow<List<Document>>
+
     /** Emits null once the document is deleted or the user may no longer see it. */
     fun observeDocument(spaceId: String, documentId: String): Flow<Document?>
 
@@ -41,6 +47,15 @@ interface DocumentRepository {
     suspend fun update(spaceId: String, documentId: String, title: String, details: DocumentDetails)
 
     suspend fun setFavorite(spaceId: String, documentId: String, favorite: Boolean)
+
+    /** Puts [document] behind its owner's PIN, or takes it out again. Only the owner may; the server says the same. */
+    suspend fun setLocked(document: Document, locked: Boolean)
+
+    /**
+     * A title for a new document: the first line of words on the picture or PDF at [sourceUri],
+     * read on the phone. Null when there are none, or the file is something else.
+     */
+    suspend fun suggestTitle(sourceUri: String): String?
 
     /** Deletes the document and its file. */
     suspend fun delete(document: Document)

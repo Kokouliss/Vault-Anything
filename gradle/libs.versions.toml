@@ -5,6 +5,8 @@ activityCompose = "1.13.0"
 agp = "9.3.1"
 androidxHilt = "1.4.0"
 appcompat = "1.8.0"
+# Fingerprint, face or screen lock in place of the document PIN on one's own phone.
+biometric = "1.1.0"
 compileSdk = "37"
 compose-bom = "2026.06.01"
 core = "1.19.0"
@@ -40,6 +42,7 @@ android-gradlePlugin = { group = "com.android.tools.build", name = "gradle", ver
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 # Only for per-app language on Android 9 to 12 (AppCompatDelegate.setApplicationLocales).
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "compose-bom" }
 androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
@@ -62,6 +65,8 @@ firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
 firebase-crashlytics = { group = "com.google.firebase", name = "firebase-crashlytics" }
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebase-bom" }
 firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore" }
+# Calls the PIN functions in firebase/functions.
+firebase-functions = { group = "com.google.firebase", name = "firebase-functions" }
 firebase-storage = { group = "com.google.firebase", name = "firebase-storage" }
 firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
 google-googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }

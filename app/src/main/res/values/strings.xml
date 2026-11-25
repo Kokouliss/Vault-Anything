@@ -4,8 +4,13 @@
     <string name="setup_needed_title">Setup needed</string>
     <string name="setup_needed_body">This build has no Firebase configuration. Add the file app/google-services.json as described in the README and build the app again.</string>
     <string name="channel_reminders">Document reminders</string>
-    <!-- Named by remindExpiring in firebase/functions; PushService maps the names to these strings. -->
+    <!-- Named by firebase/functions; PushService maps the names to these strings. The title is the document, or the person. -->
     <string name="push_expires_month">Runs out in 30 days</string>
     <string name="push_expires_week">Runs out in 7 days</string>
     <string name="push_expires_today">Runs out today</string>
+    <string name="push_grew_up_you_title">Happy 18th birthday!</string>
+    <string name="push_grew_up_you">You are an adult in your family space now. Your documents are locked: unlock the ones your parents may keep seeing.</string>
+    <string name="push_grew_up">Turned 18 today and is an adult now. Their documents are locked until they say otherwise.</string>
+    <string name="push_emergency_asked">Asked for emergency access to your locked documents. Say no in Settings before the wait is over.</string>
+    <string name="push_emergency_opened">Opened your locked documents with emergency access.</string>
 </resources>

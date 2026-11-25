@@ -72,7 +72,10 @@
     <string name="feature_family_invitation_declined">Απορρίφθηκε η πρόσκληση στον χώρο %1$s.</string>
     <string name="feature_family_space_gone">Δεν είσαι πια σε αυτόν τον χώρο.</string>
     <string name="feature_family_members_title">Μέλη</string>
-    <string name="feature_family_members_hint">Οι ενήλικες βλέπουν τα έγγραφα όλων. Τα παιδιά βλέπουν μόνο τα δικά τους.</string>
+    <string name="feature_family_members_hint">Οι ενήλικες βλέπουν τα έγγραφα όλων. Τα παιδιά βλέπουν μόνο τα δικά τους. Βάλε τα γενέθλια ενός παιδιού και γίνεται ενήλικας στα 18 του.</string>
+    <string name="feature_family_set_birthday">Γενέθλια: %1$s</string>
+    <string name="feature_family_forget_birthday">Αφαίρεση</string>
+    <string name="feature_family_child_until">Παιδί έως %1$s</string>
     <string name="feature_family_owner">Ιδιοκτήτης</string>
     <string name="feature_family_adult">Ενήλικας</string>
     <string name="feature_family_child">Παιδί</string>
@@ -106,4 +109,6 @@
     <string name="feature_family_activity_deleted">%1$s διέγραψε: %2$s</string>
     <string name="feature_family_activity_pin_reset">%1$s έδωσε νέο PIN σε %2$s</string>
     <string name="feature_family_activity_shared">%1$s έφτιαξε σύνδεσμο για: %2$s</string>
+    <string name="feature_family_activity_grew_up">%1$s έγινε 18 και είναι πλέον ενήλικας</string>
+    <string name="feature_family_activity_emergency">%1$s άνοιξε τα έγγραφα του μέλους %2$s με πρόσβαση έκτακτης ανάγκης</string>
 </resources>

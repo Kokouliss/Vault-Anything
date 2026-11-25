@@ -8,11 +8,13 @@ import com.google.firebase.storage.FirebaseStorage
 import com.kokouliss.vaultanything.core.data.firebase.FirebaseAuthRepository
 import com.kokouliss.vaultanything.core.data.firebase.FirestoreActivityRepository
 import com.kokouliss.vaultanything.core.data.firebase.FirestoreDocumentRepository
+import com.kokouliss.vaultanything.core.data.firebase.FirestoreEmergencyRepository
 import com.kokouliss.vaultanything.core.data.firebase.FirestoreLockRepository
 import com.kokouliss.vaultanything.core.data.firebase.FirestoreSpaceRepository
 import com.kokouliss.vaultanything.core.domain.repository.ActivityRepository
 import com.kokouliss.vaultanything.core.domain.repository.AuthRepository
 import com.kokouliss.vaultanything.core.domain.repository.DocumentRepository
+import com.kokouliss.vaultanything.core.domain.repository.EmergencyRepository
 import com.kokouliss.vaultanything.core.domain.repository.LockRepository
 import com.kokouliss.vaultanything.core.domain.repository.SpaceRepository
 import dagger.Binds
@@ -57,6 +59,9 @@ internal abstract class DataModule {
 
     @Binds
     abstract fun bindLockRepository(impl: FirestoreLockRepository): LockRepository
+
+    @Binds
+    abstract fun bindEmergencyRepository(impl: FirestoreEmergencyRepository): EmergencyRepository
 
     companion object {
         @Provides

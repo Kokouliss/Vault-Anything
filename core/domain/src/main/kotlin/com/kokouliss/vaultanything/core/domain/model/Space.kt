@@ -40,10 +40,15 @@ data class Space(
         userId == ownerId || (isAdult(userId) && member(ownerId)?.role == Role.CHILD)
 }
 
+/** How many years old a child is when comeOfAge in firebase/functions makes them an adult. */
+const val ADULT_AGE = 18
+
 data class Member(
     val id: String,
     val name: String,
     val role: Role = Role.CHILD,
+    /** Days since 1 January 1970, set by an adult. A child becomes an adult on their [ADULT_AGE]th birthday. */
+    val birthDay: Long? = null,
 )
 
 /** Outcome of trying to join a space with an invite code. */

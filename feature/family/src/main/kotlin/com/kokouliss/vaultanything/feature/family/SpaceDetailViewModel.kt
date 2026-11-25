@@ -205,6 +205,10 @@ internal class SpaceDetailViewModel @AssistedInject constructor(
         viewModelScope.launch { spaceRepository.setRole(key.spaceId, memberId, role) }
     }
 
+    fun setBirthday(memberId: String, day: Long?) {
+        viewModelScope.launch { spaceRepository.setBirthday(key.spaceId, memberId, day) }
+    }
+
     fun removeMember(memberId: String) {
         val space = readySpace ?: return
         viewModelScope.launch { spaceRepository.removeMember(space, memberId) }

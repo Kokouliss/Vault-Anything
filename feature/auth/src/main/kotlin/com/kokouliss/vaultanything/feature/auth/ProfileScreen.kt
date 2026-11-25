@@ -3,22 +3,26 @@ package com.kokouliss.vaultanything.feature.auth
 import androidx.activity.compose.LocalActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -31,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -45,8 +50,13 @@ import androidx.compose.ui.unit.dp
 import androidx.core.os.LocaleListCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kokouliss.vaultanything.core.domain.model.EMERGENCY_WAIT_DAYS
+import com.kokouliss.vaultanything.core.domain.model.Emergency
+import com.kokouliss.vaultanything.core.domain.model.Member
+import com.kokouliss.vaultanything.core.domain.model.Trust
 import com.kokouliss.vaultanything.core.domain.model.User
 import com.kokouliss.vaultanything.core.domain.repository.PinResult
+import com.kokouliss.vaultanything.core.domain.repository.UNLOCK_MINUTES
 import com.kokouliss.vaultanything.core.ui.R as CoreR
 import com.kokouliss.vaultanything.core.ui.component.AnyKindWordmark
 import com.kokouliss.vaultanything.core.ui.component.AppIcon
@@ -58,6 +68,10 @@ import com.kokouliss.vaultanything.core.ui.component.PinDialog
 import com.kokouliss.vaultanything.core.ui.component.TextInputDialog
 import com.kokouliss.vaultanything.core.ui.component.pageWidth
 import com.kokouliss.vaultanything.core.ui.theme.VaultAnythingTheme
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import kotlinx.coroutines.launch
 
 /**
@@ -87,6 +101,10 @@ internal fun ProfileRoute(
     val deleteState by viewModel.deleteState.collectAsStateWithLifecycle()
     val verificationSent by viewModel.verificationSent.collectAsStateWithLifecycle()
     val hasPin by viewModel.hasPin.collectAsStateWithLifecycle()
+    val emergency by viewModel.emergency.collectAsStateWithLifecycle()
+    val trusting by viewModel.trusting.collectAsStateWithLifecycle()
+    val adults by viewModel.adults.collectAsStateWithLifecycle()
+    val names by viewModel.names.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val activity = LocalActivity.current
     val scope = rememberCoroutineScope()
@@ -126,6 +144,14 @@ internal fun ProfileRoute(
         // The same proof as for deleting the account: Google's account sheet, or the password below.
         onConfirmIdentity = { viewModel.confirmIdentity(activity?.let { (requestGoogleIdToken(it) as? GoogleSignInResult.Success)?.idToken }) },
         onConfirmIdentityWithPassword = viewModel::confirmIdentityWithPassword,
+        emergency = emergency,
+        trusting = trusting,
+        adults = adults,
+        names = names,
+        onSetEmergency = viewModel::setEmergency,
+        onRemoveEmergency = viewModel::removeEmergency,
+        onAskEmergency = viewModel::askEmergency,
+        onOpenEmergency = viewModel::openEmergency,
     )
     NameDialog(nameState, user?.name, onSave = nameViewModel::save, onClose = nameViewModel::close)
 }
@@ -150,6 +176,14 @@ internal fun ProfileScreen(
     onRemovePin: suspend (current: String) -> PinResult = { PinResult.Ok },
     onConfirmIdentity: suspend () -> Boolean = { true },
     onConfirmIdentityWithPassword: suspend (String) -> Boolean = { true },
+    emergency: Emergency? = null,
+    trusting: List<Trust> = emptyList(),
+    adults: List<Member> = emptyList(),
+    names: Map<String, String> = emptyMap(),
+    onSetEmergency: (contactId: String, waitDays: Int) -> Unit = { _, _ -> },
+    onRemoveEmergency: () -> Unit = {},
+    onAskEmergency: (ownerId: String) -> Unit = {},
+    onOpenEmergency: suspend (ownerId: String) -> Boolean = { true },
 ) {
     val title = stringResource(R.string.feature_auth_profile_title)
     var confirmSignOut by rememberSaveable { mutableStateOf(false) }
@@ -219,6 +253,10 @@ internal fun ProfileScreen(
 
             SectionTitle(stringResource(R.string.feature_auth_pin_section))
             PinSection(hasPin, usesPassword, onSetPin, onRemovePin, onConfirmIdentity, onConfirmIdentityWithPassword)
+            HorizontalDivider(Modifier.padding(top = 8.dp))
+
+            SectionTitle(stringResource(R.string.feature_auth_emergency_section))
+            EmergencySection(emergency, trusting, adults, names, onSetEmergency, onRemoveEmergency, onAskEmergency, onOpenEmergency)
             HorizontalDivider(Modifier.padding(top = 8.dp))
 
             ListItem(
@@ -445,6 +483,173 @@ private fun PinSection(
             isPassword = true,
         )
     }
+}
+
+/** Emergency access: whom the person trusts with their locked documents, and who trusts them. */
+@Composable
+private fun EmergencySection(
+    emergency: Emergency?,
+    trusting: List<Trust>,
+    adults: List<Member>,
+    names: Map<String, String>,
+    onSet: (contactId: String, waitDays: Int) -> Unit,
+    onRemove: () -> Unit,
+    onAsk: (ownerId: String) -> Unit,
+    onOpen: suspend (ownerId: String) -> Boolean,
+) {
+    val scope = rememberCoroutineScope()
+    var choosing by rememberSaveable { mutableStateOf(false) }
+    /** What came of opening someone's documents, under their row. */
+    var opened by remember { mutableStateOf(emptyMap<String, Boolean>()) }
+    val format = remember { DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT) }
+    val date = { millis: Long -> format.format(Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault())) }
+    val now = System.currentTimeMillis()
+
+    Hint(stringResource(R.string.feature_auth_emergency_hint))
+    if (emergency == null) {
+        ListItem(
+            leadingContent = { AppIcon(AppIcons.Person, null) },
+            headlineContent = { Text(stringResource(R.string.feature_auth_emergency_choose)) },
+            supportingContent = if (adults.isEmpty()) {
+                { Text(stringResource(R.string.feature_auth_emergency_no_adults)) }
+            } else {
+                null
+            },
+            modifier = Modifier.clickable(enabled = adults.isNotEmpty(), role = Role.Button) { choosing = true },
+        )
+    } else {
+        val opensAt = emergency.opensAtMillis
+        ListItem(
+            leadingContent = { AppIcon(AppIcons.Person, null) },
+            headlineContent = { Text(names[emergency.contactId] ?: stringResource(R.string.feature_auth_emergency_someone)) },
+            supportingContent = {
+                Text(
+                    when {
+                        opensAt == null -> stringResource(R.string.feature_auth_emergency_wait, days(emergency.waitDays))
+                        opensAt > now -> stringResource(R.string.feature_auth_emergency_asked, date(opensAt))
+                        else -> stringResource(R.string.feature_auth_emergency_open_to_them)
+                    },
+                )
+            },
+            trailingContent = if (opensAt != null) {
+                {
+                    // Writing the choice again takes the request back; the server opens nothing after that.
+                    TextButton(onClick = { onSet(emergency.contactId, emergency.waitDays) }) {
+                        Text(stringResource(if (opensAt > now) R.string.feature_auth_say_no else R.string.feature_auth_stop))
+                    }
+                }
+            } else {
+                null
+            },
+            modifier = Modifier.clickable(role = Role.Button, onClickLabel = stringResource(R.string.feature_auth_emergency_change)) { choosing = true },
+        )
+    }
+    if (trusting.isNotEmpty()) {
+        Hint(stringResource(R.string.feature_auth_trusting_hint))
+        trusting.forEach { trust ->
+            val opensAt = trust.emergency.opensAtMillis
+            val ready = opensAt != null && opensAt <= now
+            ListItem(
+                leadingContent = { AppIcon(AppIcons.LockOpen, null) },
+                headlineContent = { Text(names[trust.ownerId].orEmpty()) },
+                supportingContent = {
+                    Text(
+                        when {
+                            opened[trust.ownerId] == true -> stringResource(R.string.feature_auth_trusting_opened, UNLOCK_MINUTES)
+                            opened[trust.ownerId] == false -> stringResource(R.string.feature_auth_trusting_failed)
+                            opensAt == null -> stringResource(R.string.feature_auth_trusting_wait, days(trust.emergency.waitDays))
+                            !ready -> stringResource(R.string.feature_auth_trusting_asked, date(opensAt))
+                            else -> stringResource(R.string.feature_auth_trusting_ready)
+                        },
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    )
+                },
+                trailingContent = when {
+                    opensAt == null -> {
+                        { TextButton(onClick = { onAsk(trust.ownerId) }) { Text(stringResource(R.string.feature_auth_ask)) } }
+                    }
+                    ready -> {
+                        {
+                            TextButton(onClick = { scope.launch { opened = opened + (trust.ownerId to onOpen(trust.ownerId)) } }) {
+                                Text(stringResource(R.string.feature_auth_open))
+                            }
+                        }
+                    }
+                    else -> null
+                },
+            )
+        }
+    }
+    if (choosing) {
+        EmergencyDialog(
+            current = emergency,
+            adults = adults,
+            onSet = { contactId, waitDays ->
+                onSet(contactId, waitDays)
+                choosing = false
+            },
+            onRemove = {
+                onRemove()
+                choosing = false
+            },
+            onDismiss = { choosing = false },
+        )
+    }
+}
+
+@Composable
+private fun EmergencyDialog(
+    current: Emergency?,
+    adults: List<Member>,
+    onSet: (contactId: String, waitDays: Int) -> Unit,
+    onRemove: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var contactId by rememberSaveable { mutableStateOf(current?.contactId ?: adults.firstOrNull()?.id) }
+    var waitDays by rememberSaveable { mutableIntStateOf(current?.waitDays ?: EMERGENCY_WAIT_DAYS[1]) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.feature_auth_emergency_choose)) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Column(Modifier.selectableGroup()) {
+                    adults.forEach { adult -> Choice(adult.name, selected = contactId == adult.id, onClick = { contactId = adult.id }) }
+                }
+                Text(
+                    stringResource(R.string.feature_auth_emergency_wait_title),
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+                )
+                Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    EMERGENCY_WAIT_DAYS.forEach { wait ->
+                        FilterChip(selected = waitDays == wait, onClick = { waitDays = wait }, label = { Text(days(wait)) })
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { contactId?.let { onSet(it, waitDays) } }, enabled = contactId != null) {
+                Text(stringResource(CoreR.string.core_ui_save))
+            }
+        },
+        dismissButton = {
+            if (current != null) TextButton(onClick = onRemove) { Text(stringResource(R.string.feature_auth_remove)) }
+            TextButton(onClick = onDismiss) { Text(stringResource(CoreR.string.core_ui_cancel)) }
+        },
+    )
+}
+
+@Composable
+private fun days(count: Int): String = pluralStringResource(R.plurals.feature_auth_days, count, count)
+
+@Composable
+private fun Hint(text: String) {
+    Text(
+        text,
+        Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable

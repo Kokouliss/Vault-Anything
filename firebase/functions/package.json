@@ -1,7 +1,7 @@
 {
   "name": "vault-anything-functions",
   "private": true,
-  "description": "Removes the files and documents that a deleted space, a deleted document or a member who left leave behind, and reminds the family of documents that run out. Needs the Blaze plan.",
+  "description": "Removes the files and documents that a deleted space, a deleted document or a member who left leave behind, reminds the family of documents that run out, checks PINs, makes share links, turns children into adults on their 18th birthday and opens emergency access. Needs the Blaze plan.",
   "main": "index.js",
   "engines": {
     "node": "22"

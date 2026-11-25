@@ -321,6 +321,17 @@ test('an adult makes another member an adult or a child; children, the owner and
   // The app and the rules treat every role other than 'adult' as child, so it gives away nothing.
 });
 
+test("an adult sets another member's birthday; nobody sets their own, and a name change keeps it", async () => {
+  const setBirthday = (db, uid, day) => updateDoc(doc(db, SPACE), { [`members.${uid}.birthDay`]: day });
+  await assertFails(setBirthday(kid(), 'kid', 14_000));
+  await assertFails(setBirthday(member(), 'member', 14_000));
+  await assertFails(setBirthday(member(), 'owner', 14_000));
+  await assertSucceeds(setBirthday(member(), 'kid', 14_000));
+  await assertSucceeds(updateDoc(doc(kid(), SPACE), { 'members.kid.name': 'Nikos' }));
+  await assertSucceeds(setBirthday(owner(), 'kid', deleteField()));
+  // A birthday that is not a number is not refused, for the reason given at setsRole in the rules.
+});
+
 test('the owner hands the space to a member on the way out, who becomes an adult', async () => {
   const handOver = (db, to, extra = {}) =>
     updateDoc(doc(db, SPACE), { ownerId: to, memberIds: arrayRemove('owner'), 'members.owner': deleteField(), ...extra });
@@ -449,6 +460,26 @@ test('a person reads whether they have a PIN, and nothing else about PINs or unl
   await assertFails(getDoc(doc(owner(), 'users/owner/private/lock')));
   await unlock('owner', 'kid');
   await assertFails(getDoc(doc(owner(), `${SPACE}/unlocks/owner`)));
+});
+
+test('a person names their emergency contact, and the contact alone lists the people who named them', async () => {
+  const name = (db, uid, emergency) => setDoc(doc(db, `users/${uid}`), { emergency }, { merge: true });
+  const whoNamedMe = (db, uid) => getDocs(query(collection(db, 'users'), where('emergency.contactId', '==', uid)));
+  await assertSucceeds(name(owner(), 'owner', { contactId: 'member', waitDays: 7 }));
+  await assertFails(name(member(), 'owner', { contactId: 'member', waitDays: 7 }));
+  await assertFails(name(owner(), 'owner', { contactId: 'owner', waitDays: 7 }));
+  await assertFails(name(owner(), 'owner', { contactId: 'member', waitDays: 2 }));
+  // Only askEmergency in functions/index.js starts the wait. The person takes a request back by writing their choice again.
+  await assertFails(name(owner(), 'owner', { contactId: 'member', waitDays: 7, askedAt: Timestamp.fromMillis(0) }));
+  await env.withSecurityRulesDisabled((context) =>
+    updateDoc(doc(context.firestore(), 'users/owner'), { hasPin: true, 'emergency.askedAt': Timestamp.fromMillis(0) }),
+  );
+  await assertSucceeds(name(owner(), 'owner', { contactId: 'member', waitDays: 30, askedAt: deleteField() }));
+  await assertFails(setDoc(doc(owner(), 'users/owner'), { hasPin: false, emergency: { contactId: 'member', waitDays: 7 } }, { merge: true }));
+  await assertSucceeds(whoNamedMe(member(), 'member'));
+  await assertFails(whoNamedMe(kid(), 'member'));
+  await assertFails(getDocs(collection(member(), 'users')));
+  await assertSucceeds(name(owner(), 'owner', deleteField()));
 });
 
 test('a member adds documents for themselves, an adult also for a child, nobody for another adult', async () => {

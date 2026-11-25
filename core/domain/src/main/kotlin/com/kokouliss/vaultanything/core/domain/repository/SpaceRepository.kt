@@ -36,6 +36,9 @@ interface SpaceRepository {
     /** Adults only, and never for the owner, who is always an adult. */
     suspend fun setRole(spaceId: String, memberId: String, role: Role)
 
+    /** Adults only, for another member. Null forgets it. The server makes the child an adult on their 18th birthday. */
+    suspend fun setBirthday(spaceId: String, memberId: String, day: Long?)
+
     /** Owner only. Also resets the invite code so the removed person cannot rejoin with the old one. */
     suspend fun removeMember(space: Space, memberId: String)
 

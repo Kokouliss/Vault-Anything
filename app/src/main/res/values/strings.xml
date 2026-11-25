@@ -9,8 +9,8 @@
     <string name="push_expires_week">Runs out in 7 days</string>
     <string name="push_expires_today">Runs out today</string>
     <string name="push_grew_up_you_title">Happy 18th birthday!</string>
-    <string name="push_grew_up_you">You are an adult in your family space now. Your documents are locked: unlock the ones your parents may keep seeing.</string>
-    <string name="push_grew_up">Turned 18 today and is an adult now. Their documents are locked until they say otherwise.</string>
+    <string name="push_grew_up_you">You are an adult in your family space now. Your parents keep seeing your documents until you lock one behind your PIN.</string>
+    <string name="push_grew_up">Turned 18 today and is an adult now.</string>
     <string name="push_emergency_asked">Asked for emergency access to your locked documents. Say no in Settings before the wait is over.</string>
     <string name="push_emergency_opened">Opened your locked documents with emergency access.</string>
 </resources>

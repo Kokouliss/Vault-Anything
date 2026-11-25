@@ -34,6 +34,9 @@
     <string name="feature_family_documents_empty_title">Δεν υπάρχουν έγγραφα ακόμα</string>
     <string name="feature_family_documents_empty_body">Κράτα εδώ διαβατήρια, κάρτες, αποτελέσματα, συμβόλαια και συνδέσμους. Οι ενήλικες βλέπουν τα έγγραφα όλων· τα παιδιά μόνο τα δικά τους.</string>
     <string name="feature_family_nothing_here">Τίποτα εδώ ακόμα.</string>
+    <string name="feature_family_nothing_found">Τίποτα για «%1$s».</string>
+    <string name="feature_family_search_hint">Αναζήτηση εγγράφων</string>
+    <string name="feature_family_search_clear">Καθαρισμός αναζήτησης</string>
     <string name="feature_family_everyone">Όλοι</string>
     <string name="feature_family_all">Όλα</string>
     <string name="feature_family_favorites">Αγαπημένα</string>

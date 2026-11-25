@@ -39,6 +39,8 @@ const val MAX_NOTE_LENGTH = 1000
 const val MAX_TAGS = 10
 const val MAX_TAG_LENGTH = 30
 const val MAX_LINK_LENGTH = 2000
+/** How much of the words read off a scan is kept. Enough to find a paper by what it says. */
+const val MAX_TEXT_LENGTH = 10_000
 
 /** The largest file the app uploads. firebase/storage.rules refuses bigger ones as well. */
 const val MAX_FILE_BYTES = 25L * 1024 * 1024
@@ -72,6 +74,8 @@ data class Document(
     val isUploaded: Boolean = true,
     /** A small picture of the first page, for pictures and PDFs. */
     val thumbnail: ImageData? = null,
+    /** The words read off a picture or a PDF on the phone, for search. Nothing for a link or a file without words. */
+    val text: String? = null,
     val addedByName: String = "",
     val createdAtMillis: Long = 0L,
     val updatedAtMillis: Long = 0L,
@@ -111,11 +115,11 @@ fun parseTags(input: String): List<String> = input.split(',', '\n')
     .distinctBy { it.folded() }
     .take(MAX_TAGS)
 
-/** True when [query] is found in the title, the tags, the note or the file name, accents and case aside. */
+/** True when [query] is found in the title, the tags, the note, the file name or the words read off it, accents and case aside. */
 fun Document.matches(query: String): Boolean {
     val needle = query.folded().trim()
     if (needle.isEmpty()) return true
-    return sequenceOf(title, details.note.orEmpty(), fileName.orEmpty(), details.tags.joinToString(" "))
+    return sequenceOf(title, details.note.orEmpty(), fileName.orEmpty(), details.tags.joinToString(" "), text.orEmpty())
         .any { needle in it.folded() }
 }
 

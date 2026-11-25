@@ -4,8 +4,9 @@ A family document vault for Android. Create a family space, invite the others, a
 
 - **Spaces** hold a family. Each member keeps their own documents in it.
 - **Adults and children.** Adults see everyone's documents and look after the children's. Children see only their own. Whoever creates the space is an adult; whoever joins starts as a child until an adult in the space says otherwise, in the members list.
-- **Documents** are a photo, a file of any kind (up to 25 MB) or a web link, with a title, a category (Identity, Health, Home, Car, School, Finance, Other), tags, a note and a date it stops being valid.
-- **Expiring soon** sits on top of the family's page: everything that runs out within three months, soonest first.
+- **Documents** are a photo, a scan, a file of any kind (up to 25 MB) or a web link, with a title, a category (Identity, Health, Home, Car, School, Finance, Other), tags, a note and a date it stops being valid.
+- **Scan paper** finds the edges of each page with the camera, straightens it, cleans shadows and fingers off it and makes one PDF of up to 20 pages. The words on a scan or a photo are read on the phone, so **search** finds a paper by what it says, as well as by its title, tags and note.
+- **Expiring soon** sits on top of the family's page: everything that runs out within three months, soonest first. A **reminder** arrives on the phone 30 days before a document runs out, 7 days before, and on the day, to the owner and to the adults of the space.
 - **Favorites** come first in the list, and have a filter of their own, like each category and each member.
 - **Open, share, print.** A document opens in the app the phone uses for it, goes through the share sheet to email, messaging apps, nearby phones and printers, and pictures and PDFs print straight from the app.
 - **Share into the vault.** "Share" a file, a picture or a link from any other app to Vault Anything, pick the family space, and it becomes a document.
@@ -109,6 +110,8 @@ The Firestore document layout is described at the top of `core/data/src/main/kot
 - The people who run the Firebase project can read everything in it. The locks coming in a later version keep documents from other family members, not from the project's owner.
 - A file is uploaded while the "Add document" screen is open, with a progress bar. Leaving the screen does not stop the upload, but a lost connection does: the document disappears again and the screen says so, so it can be added once more.
 - Only pictures and PDFs print from the app. Other files open in the app that knows them, which usually prints too.
+- The words on a scan are read with Latin letters and numbers only: a Greek paper is found by its title, tags and note, and by any numbers on it. Reading a Greek paper would need a paid cloud service.
+- Scanning paper needs Google Play services on the phone. Reminders need the Cloud Functions deployed (see above) and need notifications allowed for the app; the app asks once after sign-in.
 - Email invitations show up inside the app when the invited person signs in with that address. No email is sent.
 - Deleting a space, a document or a member's documents on leaving is finished by a Cloud Function. Until `firebase deploy` has run, deleted spaces leave their documents and files stored where nobody can reach them.
 - A document's file, kind, owner and link cannot be changed after it is added; its title, category, tags, note, date and favorite can. To replace a file, add the document again and delete the old one.

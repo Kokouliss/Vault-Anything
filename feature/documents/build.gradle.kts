@@ -11,6 +11,7 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core)
     implementation(libs.androidx.print)
+    implementation(libs.google.play.services.document.scanner)
     implementation(libs.kotlinx.serialization)
 
     testImplementation(libs.bundles.unit.test)

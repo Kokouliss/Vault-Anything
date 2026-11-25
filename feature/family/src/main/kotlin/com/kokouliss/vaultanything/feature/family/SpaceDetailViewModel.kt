@@ -7,6 +7,7 @@ import com.kokouliss.vaultanything.core.domain.model.DocumentCategory
 import com.kokouliss.vaultanything.core.domain.model.Role
 import com.kokouliss.vaultanything.core.domain.model.Space
 import com.kokouliss.vaultanything.core.domain.model.expiringSoon
+import com.kokouliss.vaultanything.core.domain.model.matches
 import com.kokouliss.vaultanything.core.domain.model.normalizeEmail
 import com.kokouliss.vaultanything.core.domain.model.sortedForDisplay
 import com.kokouliss.vaultanything.core.domain.repository.AuthRepository
@@ -36,6 +37,8 @@ internal data class DocumentFilter(
     val memberId: String? = null,
     val category: DocumentCategory? = null,
     val favoritesOnly: Boolean = false,
+    /** Words to look for in titles, tags, notes and the text read off scans. */
+    val query: String = "",
 )
 
 internal sealed interface SpaceDetailUiState {
@@ -64,7 +67,8 @@ internal sealed interface SpaceDetailUiState {
             get() = allDocuments.filter { document ->
                 (filter.memberId == null || document.ownerId == filter.memberId) &&
                     (filter.category == null || document.details.category == filter.category) &&
-                    (!filter.favoritesOnly || document.isFavorite)
+                    (!filter.favoritesOnly || document.isFavorite) &&
+                    document.matches(filter.query)
             }.sortedForDisplay()
 
         /** Documents that run out within three months, soonest first, whatever the filter says. */
@@ -122,6 +126,8 @@ internal class SpaceDetailViewModel @AssistedInject constructor(
     fun showCategory(category: DocumentCategory?) = filter.update { it.copy(category = category, favoritesOnly = false) }
 
     fun showFavorites() = filter.update { it.copy(category = null, favoritesOnly = true) }
+
+    fun search(query: String) = filter.update { it.copy(query = query) }
 
     fun renameSpace(name: String) {
         viewModelScope.launch { spaceRepository.renameSpace(key.spaceId, name) }

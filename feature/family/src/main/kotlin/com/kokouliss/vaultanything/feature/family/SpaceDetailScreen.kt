@@ -152,6 +152,7 @@ internal fun SpaceDetailRoute(
         onShowMember = viewModel::showMember,
         onShowCategory = viewModel::showCategory,
         onShowFavorites = viewModel::showFavorites,
+        onSearch = viewModel::search,
         onRenameSpace = viewModel::renameSpace,
         onShareCode = { space ->
             val text = resources.getString(
@@ -183,6 +184,7 @@ internal fun SpaceDetailScreen(
     onShowMember: (memberId: String?) -> Unit,
     onShowCategory: (DocumentCategory?) -> Unit,
     onShowFavorites: () -> Unit,
+    onSearch: (String) -> Unit,
     onRenameSpace: (String) -> Unit,
     onShareCode: (Space) -> Unit,
     onResetCode: () -> Unit,
@@ -251,7 +253,7 @@ internal fun SpaceDetailScreen(
                         }
                     }
                 } else {
-                    Documents(ready, onOpenDocument, onShowMember, onShowCategory, onShowFavorites)
+                    Documents(ready, onOpenDocument, onShowMember, onShowCategory, onShowFavorites, onSearch)
                 }
             }
         }
@@ -338,6 +340,7 @@ private fun Documents(
     onShowMember: (String?) -> Unit,
     onShowCategory: (DocumentCategory?) -> Unit,
     onShowFavorites: () -> Unit,
+    onSearch: (String) -> Unit,
 ) {
     val members = state.visibleMembers
     val names = members.associate { it.id to it.name }
@@ -346,6 +349,26 @@ private fun Documents(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        item("search") {
+            OutlinedTextField(
+                value = state.filter.query,
+                onValueChange = onSearch,
+                label = { Text(stringResource(R.string.feature_family_search_hint)) },
+                leadingIcon = { AppIcon(AppIcons.Search, null) },
+                trailingIcon = if (state.filter.query.isEmpty()) {
+                    null
+                } else {
+                    {
+                        IconButton(onClick = { onSearch("") }) {
+                            AppIcon(AppIcons.Close, stringResource(R.string.feature_family_search_clear))
+                        }
+                    }
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
         if (state.expiring.isNotEmpty()) {
             item("expiring") { ExpiringCard(state.expiring, state.today, names, onOpenDocument) }
         }
@@ -399,7 +422,11 @@ private fun Documents(
         if (state.documents.isEmpty()) {
             item("nothing") {
                 Text(
-                    stringResource(R.string.feature_family_nothing_here),
+                    if (state.filter.query.isBlank()) {
+                        stringResource(R.string.feature_family_nothing_here)
+                    } else {
+                        stringResource(R.string.feature_family_nothing_found, state.filter.query.trim())
+                    },
                     Modifier.padding(vertical = 24.dp).fillMaxWidth(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyLarge,
@@ -750,6 +777,7 @@ private fun SpaceDetailScreenPreview() {
             onShowMember = {},
             onShowCategory = {},
             onShowFavorites = {},
+            onSearch = {},
             onRenameSpace = {},
             onShareCode = {},
             onResetCode = {},

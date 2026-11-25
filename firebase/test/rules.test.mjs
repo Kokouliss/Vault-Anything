@@ -342,6 +342,8 @@ test('documents with a wrong shape are rejected', async () => {
   await assertFails(add({ note: 'x'.repeat(1001) }));
   await assertFails(add({ sizeBytes: 25 * 1024 * 1024 + 1 }));
   await assertFails(add({ thumbnail: Bytes.fromUint8Array(new Uint8Array(60001)) }));
+  await assertFails(add({ text: 'x'.repeat(10001) }));
+  await assertFails(add({ text: ['words'] }));
   await assertFails(add({ link: 'https://example.com' }));
   await assertFails(add({ secret: true }));
   const link = (url) => setDoc(doc(owner(), `${DOCUMENTS}/bad`), newLink('owner', 'owner', url));
@@ -358,6 +360,7 @@ test("a document's words change, its file and owner do not", async () => {
   await assertSucceeds(edit(owner(), KIDS_REPORT, words));
   await assertSucceeds(edit(kid(), KIDS_REPORT, { favorite: true }));
   await assertSucceeds(edit(owner(), OWNERS_PASSPORT, { uploaded: true }));
+  await assertSucceeds(edit(owner(), OWNERS_PASSPORT, { text: 'PASSPORT HELLENIC REPUBLIC' }));
   await assertFails(edit(member(), OWNERS_PASSPORT, words));
   await assertFails(edit(kid(), OWNERS_PASSPORT, { favorite: true }));
   await assertFails(edit(owner(), OWNERS_PASSPORT, { ownerId: 'kid' }));

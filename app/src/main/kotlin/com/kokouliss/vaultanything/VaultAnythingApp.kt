@@ -1,14 +1,22 @@
 package com.kokouliss.vaultanything
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.PreviewLightDark
+import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LifecycleStartEffect
@@ -96,9 +104,28 @@ private fun SignedInNavigation(launch: Launch, onLaunchHandled: () -> Unit) {
         notice = message
     }
 
+    // Reminders about documents that run out go to everyone who may see them, so the question comes
+    // right after sign-in. Android shows it at most twice; after an answer it shows nothing.
+    val context = LocalContext.current
+    var askedForNotifications by rememberSaveable { mutableStateOf(false) }
+    val askForNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    LaunchedEffect(Unit) {
+        if (!askedForNotifications && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            askedForNotifications = true
+            askForNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     LaunchedEffect(launch) {
         launch.shared?.let {
             backStack.add(ShareKey(uri = it.uri, text = it.text))
+            onLaunchHandled()
+        }
+        launch.document?.let {
+            backStack.add(SpaceDetailKey(it.spaceId))
+            backStack.add(DocumentDetailKey(it.spaceId, it.documentId))
             onLaunchHandled()
         }
     }

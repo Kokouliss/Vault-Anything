@@ -21,9 +21,17 @@ internal data class Launch(
     val shared: Shared? = null,
     /** The code of a tapped or scanned invite link. */
     val inviteCode: String? = null,
+    /** The document a tapped reminder is about. */
+    val document: OpenDocument? = null,
 )
 
 internal data class Shared(val uri: String?, val text: String?)
+
+internal data class OpenDocument(val spaceId: String, val documentId: String)
+
+/** The extras a reminder from firebase/functions carries; PushService puts the same ones on its own notifications. */
+internal const val EXTRA_SPACE_ID = "spaceId"
+internal const val EXTRA_DOCUMENT_ID = "documentId"
 
 // Everything in an intent comes from outside the app. It is only ever shown, parsed into a code or
 // a web link, or uploaded as a file the person then names, which the security rules guard.
@@ -37,6 +45,7 @@ private fun Intent.toLaunch() = Launch(
         null
     },
     inviteCode = if (action == Intent.ACTION_VIEW) dataString?.let(InviteCode::fromLink) else null,
+    document = getStringExtra(EXTRA_SPACE_ID)?.let { spaceId -> getStringExtra(EXTRA_DOCUMENT_ID)?.let { OpenDocument(spaceId, it) } },
 )
 
 // AppCompatActivity, because it is what applies the language chosen on the profile page on Android 9 to 12.

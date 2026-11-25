@@ -64,6 +64,7 @@ internal object Fields {
     const val SIZE_BYTES = "sizeBytes"
     const val UPLOADED = "uploaded"
     const val THUMBNAIL = "thumbnail"
+    const val TEXT = "text"
     const val ADDED_BY_ID = "addedById"
     const val ADDED_BY_NAME = "addedByName"
 }
@@ -112,6 +113,7 @@ internal fun DocumentSnapshot.toDocument(spaceId: String): Document? {
         // A link has no file to wait for.
         isUploaded = getBoolean(Fields.UPLOADED) != false,
         thumbnail = getBlob(Fields.THUMBNAIL)?.let { ImageData(it.toBytes()) },
+        text = getString(Fields.TEXT),
         addedByName = getString(Fields.ADDED_BY_NAME).orEmpty(),
         // A just-added document has no server time yet; the estimate keeps it on top of the list.
         createdAtMillis = getTimestamp(Fields.CREATED_AT, ServerTimestampBehavior.ESTIMATE)?.toDate()?.time ?: 0L,

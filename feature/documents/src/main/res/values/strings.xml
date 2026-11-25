@@ -21,6 +21,8 @@
     <string name="feature_documents_add_title">Add document</string>
     <string name="feature_documents_edit_title">Edit document</string>
     <string name="feature_documents_attachment_needed">Add a photo, a file or a link.</string>
+    <string name="feature_documents_scan_paper">Scan paper</string>
+    <string name="feature_documents_scan_unavailable">Scanning needs Google Play services, which this phone lacks or has to update.</string>
     <string name="feature_documents_take_photo">Take photo</string>
     <string name="feature_documents_choose_file">Choose file</string>
     <string name="feature_documents_paste_link">Paste link</string>

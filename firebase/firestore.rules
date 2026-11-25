@@ -67,7 +67,7 @@ service cloud.firestore {
 
     function validDocument(document) {
       return document.keys().hasOnly(['ownerId', 'title', 'kind', 'category', 'tags', 'favorite', 'expiresDay', 'note',
-          'link', 'fileName', 'mimeType', 'sizeBytes', 'uploaded', 'thumbnail', 'addedById', 'addedByName', 'createdAt', 'updatedAt'])
+          'link', 'fileName', 'mimeType', 'sizeBytes', 'uploaded', 'thumbnail', 'text', 'addedById', 'addedByName', 'createdAt', 'updatedAt'])
         && document.ownerId is string
         && document.title is string && document.title.size() > 0 && document.title.size() <= 100
         && document.kind in ['file', 'image', 'link']
@@ -88,6 +88,8 @@ service cloud.firestore {
             && document.uploaded is bool
             && !('link' in document)))
         && (!('thumbnail' in document) || (document.thumbnail is bytes && document.thumbnail.size() <= 60000))
+        // The words read off a scan, for search. MAX_TEXT_LENGTH in the app.
+        && (!('text' in document) || (document.text is string && document.text.size() <= 10000))
         && document.addedById is string
         && document.addedByName is string && document.addedByName.size() <= 100
         && document.createdAt is timestamp

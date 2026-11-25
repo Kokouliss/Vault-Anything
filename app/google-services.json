@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "908141254278",
+    "project_id": "vault-anything",
+    "storage_bucket": "vault-anything.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:908141254278:android:7bbd345165a5884c886307",
+        "android_client_info": {
+          "package_name": "com.kokouliss.vaultanything"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "908141254278-rafqm9d2bo3c8p8cuaiqkonttap0uich.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDsPk6F_Gkpu84KWGFSBmJPoYE1O-c-dJc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "908141254278-rafqm9d2bo3c8p8cuaiqkonttap0uich.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

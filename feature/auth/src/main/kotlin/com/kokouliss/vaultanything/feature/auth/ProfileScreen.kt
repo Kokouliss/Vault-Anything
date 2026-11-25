@@ -46,6 +46,7 @@ import androidx.core.os.LocaleListCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kokouliss.vaultanything.core.domain.model.User
+import com.kokouliss.vaultanything.core.domain.repository.PinResult
 import com.kokouliss.vaultanything.core.ui.R as CoreR
 import com.kokouliss.vaultanything.core.ui.component.AnyKindWordmark
 import com.kokouliss.vaultanything.core.ui.component.AppIcon
@@ -53,6 +54,7 @@ import com.kokouliss.vaultanything.core.ui.component.AppIcons
 import com.kokouliss.vaultanything.core.ui.component.BackButton
 import com.kokouliss.vaultanything.core.ui.component.ConfirmDialog
 import com.kokouliss.vaultanything.core.ui.component.InitialAvatar
+import com.kokouliss.vaultanything.core.ui.component.PinDialog
 import com.kokouliss.vaultanything.core.ui.component.TextInputDialog
 import com.kokouliss.vaultanything.core.ui.component.pageWidth
 import com.kokouliss.vaultanything.core.ui.theme.VaultAnythingTheme
@@ -84,6 +86,7 @@ internal fun ProfileRoute(
     val nameState by nameViewModel.state.collectAsStateWithLifecycle()
     val deleteState by viewModel.deleteState.collectAsStateWithLifecycle()
     val verificationSent by viewModel.verificationSent.collectAsStateWithLifecycle()
+    val hasPin by viewModel.hasPin.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val activity = LocalActivity.current
     val scope = rememberCoroutineScope()
@@ -117,6 +120,12 @@ internal fun ProfileRoute(
         onSendVerification = viewModel::sendVerificationEmail,
         onBack = onBack,
         onChangeName = nameViewModel::open,
+        hasPin = hasPin,
+        onSetPin = viewModel::setPin,
+        onRemovePin = viewModel::removePin,
+        // The same proof as for deleting the account: Google's account sheet, or the password below.
+        onConfirmIdentity = { viewModel.confirmIdentity(activity?.let { (requestGoogleIdToken(it) as? GoogleSignInResult.Success)?.idToken }) },
+        onConfirmIdentityWithPassword = viewModel::confirmIdentityWithPassword,
     )
     NameDialog(nameState, user?.name, onSave = nameViewModel::save, onClose = nameViewModel::close)
 }
@@ -136,6 +145,11 @@ internal fun ProfileScreen(
     onSendVerification: () -> Unit,
     onBack: () -> Unit,
     onChangeName: () -> Unit = {},
+    hasPin: Boolean = false,
+    onSetPin: suspend (pin: String, current: String?) -> PinResult = { _, _ -> PinResult.Ok },
+    onRemovePin: suspend (current: String) -> PinResult = { PinResult.Ok },
+    onConfirmIdentity: suspend () -> Boolean = { true },
+    onConfirmIdentityWithPassword: suspend (String) -> Boolean = { true },
 ) {
     val title = stringResource(R.string.feature_auth_profile_title)
     var confirmSignOut by rememberSaveable { mutableStateOf(false) }
@@ -201,6 +215,10 @@ internal fun ProfileScreen(
                     Choice(label = name, selected = languageTag == tag, onClick = { onLanguageChange(tag) })
                 }
             }
+            HorizontalDivider(Modifier.padding(top = 8.dp))
+
+            SectionTitle(stringResource(R.string.feature_auth_pin_section))
+            PinSection(hasPin, usesPassword, onSetPin, onRemovePin, onConfirmIdentity, onConfirmIdentityWithPassword)
             HorizontalDivider(Modifier.padding(top = 8.dp))
 
             ListItem(
@@ -291,6 +309,140 @@ internal fun ProfileScreen(
                 onSignOut()
             },
             onDismiss = { confirmSignOut = false },
+        )
+    }
+}
+
+/** Which dialog of the PIN section is open. */
+private enum class PinStep { None, New, Current, CurrentToRemove, Password }
+
+/**
+ * Set, change, remove or replace the PIN that locks documents. Changing or removing takes the
+ * current PIN; a forgotten one is replaced after the person confirms it is them, the way deleting
+ * the account asks, which the server takes as a fresh sign-in for a few minutes.
+ */
+@Composable
+private fun PinSection(
+    hasPin: Boolean,
+    usesPassword: Boolean,
+    onSetPin: suspend (pin: String, current: String?) -> PinResult,
+    onRemovePin: suspend (current: String) -> PinResult,
+    onConfirmIdentity: suspend () -> Boolean,
+    onConfirmIdentityWithPassword: suspend (String) -> Boolean,
+) {
+    val scope = rememberCoroutineScope()
+    var step by rememberSaveable { mutableStateOf(PinStep.None) }
+    /** The current PIN once given, for the new one that follows. */
+    var current by remember { mutableStateOf<String?>(null) }
+    var result by remember { mutableStateOf<PinResult?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var confirmFailed by rememberSaveable { mutableStateOf(false) }
+    val close = {
+        step = PinStep.None
+        current = null
+        result = null
+    }
+    // One call at a time; the dialog shows what came of it and closes once it worked.
+    val attempt = { call: suspend () -> PinResult ->
+        scope.launch {
+            busy = true
+            result = call()
+            busy = false
+            if (result == PinResult.Ok) close()
+        }
+    }
+    val confirm = { call: suspend () -> Boolean ->
+        scope.launch {
+            busy = true
+            val confirmed = call()
+            busy = false
+            confirmFailed = !confirmed
+            step = if (confirmed) PinStep.New else PinStep.None
+        }
+    }
+
+    if (!hasPin) {
+        ListItem(
+            leadingContent = { AppIcon(AppIcons.Lock, null) },
+            headlineContent = { Text(stringResource(R.string.feature_auth_set_pin)) },
+            supportingContent = { Text(stringResource(R.string.feature_auth_set_pin_hint)) },
+            modifier = Modifier.clickable(role = Role.Button) { step = PinStep.New },
+        )
+    } else {
+        ListItem(
+            leadingContent = { AppIcon(AppIcons.Lock, null) },
+            headlineContent = { Text(stringResource(R.string.feature_auth_change_pin)) },
+            modifier = Modifier.clickable(role = Role.Button) { step = PinStep.Current },
+        )
+        ListItem(
+            leadingContent = { AppIcon(AppIcons.LockOpen, null) },
+            headlineContent = { Text(stringResource(R.string.feature_auth_remove_pin)) },
+            supportingContent = { Text(stringResource(R.string.feature_auth_remove_pin_hint)) },
+            modifier = Modifier.clickable(role = Role.Button) { step = PinStep.CurrentToRemove },
+        )
+        ListItem(
+            leadingContent = { AppIcon(AppIcons.Refresh, null) },
+            headlineContent = { Text(stringResource(R.string.feature_auth_forgot_pin)) },
+            supportingContent = {
+                Text(
+                    stringResource(
+                        when {
+                            !confirmFailed -> R.string.feature_auth_forgot_pin_hint
+                            usesPassword -> R.string.feature_auth_confirm_failed_password
+                            else -> R.string.feature_auth_confirm_failed
+                        },
+                    ),
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
+            },
+            trailingContent = if (busy && step == PinStep.None) {
+                { CircularProgressIndicator(Modifier.size(24.dp)) }
+            } else {
+                null
+            },
+            modifier = Modifier.clickable(enabled = !busy, role = Role.Button) {
+                confirmFailed = false
+                if (usesPassword) step = PinStep.Password else confirm(onConfirmIdentity)
+            },
+        )
+    }
+
+    when (step) {
+        PinStep.None -> Unit
+        PinStep.New -> PinDialog(
+            title = stringResource(if (hasPin) R.string.feature_auth_new_pin else R.string.feature_auth_set_pin),
+            confirmLabel = stringResource(CoreR.string.core_ui_save),
+            result = result,
+            isBusy = busy,
+            onConfirm = { pin -> attempt { onSetPin(pin, current) } },
+            onDismiss = close,
+        )
+        PinStep.Current -> PinDialog(
+            title = stringResource(R.string.feature_auth_current_pin),
+            confirmLabel = stringResource(R.string.feature_auth_next),
+            onConfirm = { pin ->
+                current = pin
+                step = PinStep.New
+            },
+            onDismiss = close,
+        )
+        PinStep.CurrentToRemove -> PinDialog(
+            title = stringResource(R.string.feature_auth_current_pin),
+            confirmLabel = stringResource(R.string.feature_auth_remove),
+            result = result,
+            isBusy = busy,
+            onConfirm = { pin -> attempt { onRemovePin(pin) } },
+            onDismiss = close,
+        )
+        PinStep.Password -> TextInputDialog(
+            title = stringResource(R.string.feature_auth_confirm_its_you),
+            label = stringResource(R.string.feature_auth_password),
+            confirmLabel = stringResource(R.string.feature_auth_next),
+            onConfirm = { password -> confirm { onConfirmIdentityWithPassword(password) } },
+            onDismiss = close,
+            maxLength = 128,
+            isBusy = busy,
+            isPassword = true,
         )
     }
 }

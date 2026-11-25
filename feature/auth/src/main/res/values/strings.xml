@@ -53,5 +53,19 @@
     <string name="feature_auth_delete_account_confirm_text_password">You leave every space and your documents are deleted with you. A space with nobody else in it is deleted. A space you share goes on without you; if you own it, the next adult becomes its owner. You\'ll type your password once more.</string>
     <string name="feature_auth_confirm_its_you">Confirm it\'s you</string>
     <string name="feature_auth_delete_account_failed_password">Deleting did not work. Check your connection and your password.</string>
+    <string name="feature_auth_pin_section">Document PIN</string>
+    <string name="feature_auth_set_pin">Set a PIN</string>
+    <string name="feature_auth_set_pin_hint">Lock a document behind it. The other adults in your spaces then need the PIN to see it, and so do you.</string>
+    <string name="feature_auth_change_pin">Change PIN</string>
+    <string name="feature_auth_remove_pin">Remove PIN</string>
+    <string name="feature_auth_remove_pin_hint">Your locked documents stay yours alone until you unlock them.</string>
+    <string name="feature_auth_forgot_pin">Forgot your PIN?</string>
+    <string name="feature_auth_forgot_pin_hint">Confirm it\'s you, then choose a new one.</string>
+    <string name="feature_auth_confirm_failed">Could not confirm it\'s you. Check your connection and that you chose the same Google account.</string>
+    <string name="feature_auth_confirm_failed_password">Could not confirm it\'s you. Check your connection and your password.</string>
+    <string name="feature_auth_current_pin">Current PIN</string>
+    <string name="feature_auth_new_pin">New PIN</string>
+    <string name="feature_auth_next">Next</string>
+    <string name="feature_auth_remove">Remove</string>
     <string name="feature_auth_maker">AnyKind Apps</string>
 </resources>

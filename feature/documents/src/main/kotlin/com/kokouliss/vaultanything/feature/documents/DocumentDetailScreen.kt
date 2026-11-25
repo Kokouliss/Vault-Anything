@@ -1,9 +1,11 @@
 package com.kokouliss.vaultanything.feature.documents
 
 import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.CancellationSignal
 import android.os.ParcelFileDescriptor
@@ -14,18 +16,21 @@ import android.print.PrintDocumentInfo
 import android.print.PrintManager
 import android.text.format.Formatter
 import android.widget.Toast
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -51,6 +56,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
@@ -70,12 +77,17 @@ import com.kokouliss.vaultanything.core.domain.model.Document
 import com.kokouliss.vaultanything.core.domain.model.DocumentCategory
 import com.kokouliss.vaultanything.core.domain.model.DocumentDetails
 import com.kokouliss.vaultanything.core.domain.model.DocumentKind
+import com.kokouliss.vaultanything.core.domain.repository.PinResult
 import com.kokouliss.vaultanything.core.ui.R as CoreR
 import com.kokouliss.vaultanything.core.ui.component.AppIcon
 import com.kokouliss.vaultanything.core.ui.component.AppIcons
 import com.kokouliss.vaultanything.core.ui.component.BackButton
 import com.kokouliss.vaultanything.core.ui.component.ConfirmDialog
+import com.kokouliss.vaultanything.core.ui.component.EmptyState
 import com.kokouliss.vaultanything.core.ui.component.LoadingCrossfade
+import com.kokouliss.vaultanything.core.ui.component.PinDialog
+import com.kokouliss.vaultanything.core.ui.component.canUseDeviceLock
+import com.kokouliss.vaultanything.core.ui.component.confirmWithDeviceLock
 import com.kokouliss.vaultanything.core.ui.component.destructiveMenuItemColors
 import com.kokouliss.vaultanything.core.ui.component.expiryLabel
 import com.kokouliss.vaultanything.core.ui.component.icon
@@ -109,6 +121,11 @@ internal fun DocumentDetailRoute(
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     var fetching by remember { mutableStateOf(false) }
+    var askPin by rememberSaveable { mutableStateOf(false) }
+    var pinResult by remember { mutableStateOf<PinResult?>(null) }
+    var checkingPin by remember { mutableStateOf(false) }
+    val activity = LocalActivity.current
+    val unlockPrompt = stringResource(R.string.feature_documents_unlock_prompt)
 
     if (uiState is DocumentDetailUiState.Gone) {
         LaunchedEffect(Unit) { onGone(resources.getString(R.string.feature_documents_document_gone)) }
@@ -144,10 +161,41 @@ internal fun DocumentDetailRoute(
             viewModel.delete()
             onBack()
         },
+        // The phone's own check first, when it has one; the PIN when it fails or there is none.
+        onUnlock = {
+            pinResult = null
+            if (activity != null && canUseDeviceLock(context)) {
+                activity.confirmWithDeviceLock(unlockPrompt) { confirmed -> if (confirmed) viewModel.unlockSelf() else askPin = true }
+            } else {
+                askPin = true
+            }
+        },
+        onSetLocked = { locked ->
+            viewModel.setLocked(locked)
+            // A document just locked goes back behind the list's "locked documents" row.
+            if (locked) onBack()
+        },
         onOpen = { withFile(it, FileAction.Open) },
         onShare = { withFile(it, FileAction.Share) },
         onPrint = { withFile(it, FileAction.Print) },
     )
+
+    if (askPin) {
+        PinDialog(
+            title = stringResource(R.string.feature_documents_your_pin),
+            result = pinResult,
+            isBusy = checkingPin,
+            onConfirm = { pin ->
+                scope.launch {
+                    checkingPin = true
+                    pinResult = viewModel.unlock(pin)
+                    checkingPin = false
+                    if (pinResult == PinResult.Ok) askPin = false
+                }
+            },
+            onDismiss = { askPin = false },
+        )
+    }
 }
 
 /** Hands [uri] to another app, or to the printer. [file] is the same thing as a path, for printing a PDF. */
@@ -225,6 +273,8 @@ internal fun DocumentDetailScreen(
     onEdit: () -> Unit,
     onSetFavorite: (Boolean) -> Unit,
     onDelete: () -> Unit,
+    onUnlock: () -> Unit,
+    onSetLocked: (Boolean) -> Unit,
     onOpen: (Document) -> Unit,
     onShare: (Document) -> Unit,
     onPrint: (Document) -> Unit,
@@ -241,7 +291,7 @@ internal fun DocumentDetailScreen(
                 title = { Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = { BackButton(onBack) },
                 actions = {
-                    if (document != null && ready.canEdit) {
+                    if (document != null && ready.canEdit && !ready.isSealed) {
                         IconButton(onClick = { onSetFavorite(!document.isFavorite) }) {
                             AppIcon(
                                 if (document.isFavorite) AppIcons.Star else AppIcons.StarOutline,
@@ -249,7 +299,12 @@ internal fun DocumentDetailScreen(
                                 tint = if (document.isFavorite) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface,
                             )
                         }
-                        DocumentMenu(onEdit = onEdit, onDelete = { confirmDelete = true })
+                        DocumentMenu(
+                            onEdit = onEdit,
+                            onDelete = { confirmDelete = true },
+                            onSetLocked = if (ready.canLock) onSetLocked else null,
+                            isLocked = document.isLocked,
+                        )
                     }
                 },
             )
@@ -264,6 +319,19 @@ internal fun DocumentDetailScreen(
         ) {
             LoadingCrossfade(document == null) {
                 if (document == null) return@LoadingCrossfade
+                if (ready.isSealed) {
+                    EmptyState(
+                        icon = AppIcons.Lock,
+                        title = stringResource(R.string.feature_documents_locked_title),
+                        body = stringResource(R.string.feature_documents_locked_body),
+                    ) {
+                        Button(onClick = onUnlock) {
+                            AppIcon(AppIcons.LockOpen, null, Modifier.padding(end = 8.dp))
+                            Text(stringResource(CoreR.string.core_ui_unlock))
+                        }
+                    }
+                    return@LoadingCrossfade
+                }
                 Column(
                     Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -369,6 +437,35 @@ private fun Details(state: DocumentDetailUiState.Ready) {
             Text(note, style = MaterialTheme.typography.bodyLarge)
         }
         Line(stringResource(R.string.feature_documents_added_by, document.addedByName))
+        document.text?.takeIf { it.isNotBlank() }?.let { Words(it) }
+    }
+}
+
+/** The words read off the paper, to copy a number or a name off it without typing. */
+@Composable
+private fun Words(text: String) {
+    val clipboard = LocalClipboard.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val label = stringResource(R.string.feature_documents_words)
+    Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleMedium)
+        IconButton(
+            onClick = {
+                scope.launch {
+                    clipboard.setClipEntry(ClipEntry(ClipData.newPlainText(label, text)))
+                    // Android 13 and up says "Copied" by itself.
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                        Toast.makeText(context, R.string.feature_documents_copied, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+        ) {
+            AppIcon(AppIcons.ContentCopy, stringResource(R.string.feature_documents_copy_words))
+        }
+    }
+    SelectionContainer {
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -381,8 +478,9 @@ private fun Line(text: String, emphasis: Boolean = false) {
     )
 }
 
+/** [onSetLocked] is null for someone who may not lock this document: not its owner, or without a PIN. */
 @Composable
-private fun DocumentMenu(onEdit: () -> Unit, onDelete: () -> Unit) {
+private fun DocumentMenu(onEdit: () -> Unit, onDelete: () -> Unit, onSetLocked: ((Boolean) -> Unit)?, isLocked: Boolean) {
     var expanded by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { expanded = true }) {
@@ -397,6 +495,16 @@ private fun DocumentMenu(onEdit: () -> Unit, onDelete: () -> Unit) {
                     onEdit()
                 },
             )
+            if (onSetLocked != null) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(if (isLocked) R.string.feature_documents_remove_lock else R.string.feature_documents_lock)) },
+                    leadingIcon = { AppIcon(if (isLocked) AppIcons.LockOpen else AppIcons.Lock, null) },
+                    onClick = {
+                        expanded = false
+                        onSetLocked(!isLocked)
+                    },
+                )
+            }
             DropdownMenuItem(
                 text = { Text(stringResource(CoreR.string.core_ui_delete)) },
                 leadingIcon = { AppIcon(AppIcons.Delete, null) },
@@ -438,6 +546,8 @@ private fun DocumentDetailScreenPreview() {
             onEdit = {},
             onSetFavorite = {},
             onDelete = {},
+            onUnlock = {},
+            onSetLocked = {},
             onOpen = {},
             onShare = {},
             onPrint = {},

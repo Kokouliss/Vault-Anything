@@ -67,7 +67,7 @@ service cloud.firestore {
 
     function validDocument(document) {
       return document.keys().hasOnly(['ownerId', 'title', 'kind', 'category', 'tags', 'favorite', 'expiresDay', 'note',
-          'link', 'fileName', 'mimeType', 'sizeBytes', 'uploaded', 'thumbnail', 'text', 'addedById', 'addedByName', 'createdAt', 'updatedAt'])
+          'link', 'fileName', 'mimeType', 'sizeBytes', 'uploaded', 'thumbnail', 'text', 'locked', 'addedById', 'addedByName', 'createdAt', 'updatedAt'])
         && document.ownerId is string
         && document.title is string && document.title.size() > 0 && document.title.size() <= 100
         && document.kind in ['file', 'image', 'link']
@@ -90,6 +90,8 @@ service cloud.firestore {
         && (!('thumbnail' in document) || (document.thumbnail is bytes && document.thumbnail.size() <= 60000))
         // The words read off a scan, for search. MAX_TEXT_LENGTH in the app.
         && (!('text' in document) || (document.text is string && document.text.size() <= 10000))
+        // Behind the owner's PIN. Documents from before locks exist have no field, which counts as unlocked.
+        && (!('locked' in document) || document.locked is bool)
         && document.addedById is string
         && document.addedByName is string && document.addedByName.size() <= 100
         && document.createdAt is timestamp
@@ -262,26 +264,75 @@ service cloud.firestore {
           return ownerId == uid() || (isAdult(theSpace()) && roleOf(theSpace(), ownerId) != 'adult');
         }
 
-        // A child's query asks for their own documents only; the rules refuse a wider one.
-        allow read: if isSpaceMember(spaceId) && maySee(resource.data.ownerId);
+        function locked(document) {
+          return document.get('locked', false) == true;
+        }
 
+        // The caller gave verifyPin in firebase/functions the owner's PIN a short while ago: the
+        // function then wrote spaces/{spaceId}/unlocks/{caller} with the time the grant runs out.
+        function unlocked(ownerId) {
+          return exists(/databases/$(database)/documents/spaces/$(spaceId)/unlocks/$(uid()))
+            && ownerId in get(/databases/$(database)/documents/spaces/$(spaceId)/unlocks/$(uid())).data.grants
+            && get(/databases/$(database)/documents/spaces/$(spaceId)/unlocks/$(uid())).data.grants[ownerId] > request.time;
+        }
+
+        // A child's query asks for their own documents only; the rules refuse a wider one. An adult's
+        // query leaves out the locked documents of others, unless it names one owner it has unlocked.
+        // The owner always sees their own locked documents: the app asks them for the PIN itself.
+        // resource.data.locked on purpose, not get() with a default: a query that says nothing about
+        // locked must be refused, and the default would let it through. A document from before locks
+        // existed has no field and gets locked: false from its owner's app the next time it lists.
+        allow read: if isSpaceMember(spaceId) && maySee(resource.data.ownerId)
+          && (resource.data.ownerId == uid() || resource.data.locked == false || unlocked(resource.data.ownerId));
+
+        // Only the owner locks a document. An adult adding one for a child adds it unlocked.
         allow create: if isSpaceMember(spaceId)
           && validDocument(request.resource.data)
           && request.resource.data.ownerId in theSpace().memberIds
           && mayManage(request.resource.data.ownerId)
+          && (!locked(request.resource.data) || request.resource.data.ownerId == uid())
           && request.resource.data.addedById == uid()
           && request.resource.data.createdAt == request.time
           && request.resource.data.updatedAt == request.time;
 
-        // Whose it is, what it is and who added it never change.
+        // Whose it is, what it is and who added it never change. Only the owner locks or unlocks it.
         allow update: if isSpaceMember(spaceId)
           && validDocument(request.resource.data)
           && mayManage(resource.data.ownerId)
+          && (locked(request.resource.data) == locked(resource.data) || resource.data.ownerId == uid())
           && !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['ownerId', 'kind', 'link', 'fileName', 'mimeType', 'sizeBytes', 'thumbnail', 'addedById', 'addedByName', 'createdAt']);
 
         allow delete: if isSpaceMember(spaceId) && mayManage(resource.data.ownerId);
       }
+
+      // Who added, opened and deleted which document, for the adults. Members write their own
+      // entries at the server's time; nothing is changed or removed. firebase/functions adds the
+      // PIN resets with admin rights.
+      match /activity/{entryId} {
+        allow read: if isSpaceMember(spaceId) && isAdult(space(spaceId));
+
+        allow create: if isSpaceMember(spaceId)
+          && request.resource.data.keys().hasOnly(['at', 'actorId', 'actorName', 'action', 'documentId', 'documentTitle'])
+          && request.resource.data.at == request.time
+          && request.resource.data.actorId == uid()
+          && request.resource.data.actorName is string && request.resource.data.actorName.size() <= 100
+          && request.resource.data.action in ['added', 'opened', 'deleted']
+          && request.resource.data.documentId is string
+          && request.resource.data.documentTitle is string && request.resource.data.documentTitle.size() <= 100;
+
+        allow update, delete: if false;
+      }
+
+      // spaces/{spaceId}/unlocks/{memberId} is written by verifyPin in firebase/functions and read
+      // by the document rules above only.
+    }
+
+    // hasPin: whether this person set a PIN, so the app knows what to offer. Written by setPin in
+    // firebase/functions, which keeps the PIN itself out of reach under users/{userId}/private/lock.
+    match /users/{userId} {
+      allow get: if signedIn() && uid() == userId;
+      allow list, write: if false;
     }
 
     // The devices that get a person's notifications. Only that person's own devices write here;

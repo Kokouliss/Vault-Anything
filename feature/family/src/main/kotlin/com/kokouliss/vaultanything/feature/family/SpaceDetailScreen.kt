@@ -1,6 +1,7 @@
 package com.kokouliss.vaultanything.feature.family
 
 import android.content.Intent
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -62,6 +63,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -90,6 +92,7 @@ import com.kokouliss.vaultanything.core.domain.model.Member
 import com.kokouliss.vaultanything.core.domain.model.Space
 import com.kokouliss.vaultanything.core.domain.model.normalizeEmail
 import com.kokouliss.vaultanything.core.domain.model.Role as MemberRole
+import com.kokouliss.vaultanything.core.domain.repository.PinResult
 import com.kokouliss.vaultanything.core.ui.R as CoreR
 import com.kokouliss.vaultanything.core.ui.component.AppIcon
 import com.kokouliss.vaultanything.core.ui.component.AppIcons
@@ -99,9 +102,12 @@ import com.kokouliss.vaultanything.core.ui.component.DocumentThumbnail
 import com.kokouliss.vaultanything.core.ui.component.EmptyState
 import com.kokouliss.vaultanything.core.ui.component.InitialAvatar
 import com.kokouliss.vaultanything.core.ui.component.LoadingCrossfade
+import com.kokouliss.vaultanything.core.ui.component.PinDialog
 import com.kokouliss.vaultanything.core.ui.component.PopIn
 import com.kokouliss.vaultanything.core.ui.component.TextInputDialog
 import com.kokouliss.vaultanything.core.ui.component.UndoSnackbar
+import com.kokouliss.vaultanything.core.ui.component.canUseDeviceLock
+import com.kokouliss.vaultanything.core.ui.component.confirmWithDeviceLock
 import com.kokouliss.vaultanything.core.ui.component.destructiveMenuItemColors
 import com.kokouliss.vaultanything.core.ui.component.expiryLabel
 import com.kokouliss.vaultanything.core.ui.component.label
@@ -123,12 +129,21 @@ internal fun SpaceDetailRoute(
     onGone: (message: String) -> Unit,
     notice: String?,
     onNoticeShown: () -> Unit,
+    onOpenActivity: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val resources = LocalResources.current
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val ready = uiState as? SpaceDetailUiState.Ready
+    // Whose PIN is being asked for, and which child is getting a new one.
+    var pinFor by rememberSaveable { mutableStateOf<String?>(null) }
+    var resetFor by rememberSaveable { mutableStateOf<String?>(null) }
+    var pinResult by remember { mutableStateOf<PinResult?>(null) }
+    var pinBusy by remember { mutableStateOf(false) }
+    val activity = LocalActivity.current
+    val unlockPrompt = stringResource(R.string.feature_family_unlock_prompt)
 
     if (uiState is SpaceDetailUiState.Gone) {
         LaunchedEffect(Unit) { onGone(resources.getString(R.string.feature_family_space_gone)) }
@@ -171,7 +186,64 @@ internal fun SpaceDetailRoute(
         onRemoveMember = viewModel::removeMember,
         onLeaveSpace = viewModel::leaveSpace,
         onDeleteSpace = viewModel::deleteSpace,
+        // One's own open with the phone's own check first, when it has one; the PIN otherwise.
+        onUnlock = { ownerId ->
+            pinResult = null
+            if (ownerId == ready?.currentUserId && activity != null && canUseDeviceLock(context)) {
+                activity.confirmWithDeviceLock(unlockPrompt) { confirmed -> if (confirmed) viewModel.unlockSelf() else pinFor = ownerId }
+            } else {
+                pinFor = ownerId
+            }
+        },
+        onSetAllLocked = viewModel::setAllLocked,
+        onResetPin = {
+            pinResult = null
+            resetFor = it
+        },
+        onOpenActivity = onOpenActivity,
     )
+
+    pinFor?.let { ownerId ->
+        PinDialog(
+            title = if (ownerId == ready?.currentUserId) {
+                stringResource(R.string.feature_family_your_pin)
+            } else {
+                stringResource(R.string.feature_family_pin_of, ready?.space?.member(ownerId)?.name.orEmpty())
+            },
+            result = pinResult,
+            isBusy = pinBusy,
+            onConfirm = { pin ->
+                scope.launch {
+                    pinBusy = true
+                    pinResult = viewModel.unlock(ownerId, pin)
+                    pinBusy = false
+                    if (pinResult == PinResult.Ok) pinFor = null
+                }
+            },
+            onDismiss = { pinFor = null },
+        )
+    }
+    resetFor?.let { memberId ->
+        val name = ready?.space?.member(memberId)?.name.orEmpty()
+        PinDialog(
+            title = stringResource(R.string.feature_family_new_pin_for, name),
+            confirmLabel = stringResource(R.string.feature_family_reset),
+            result = pinResult,
+            isBusy = pinBusy,
+            onConfirm = { pin ->
+                scope.launch {
+                    pinBusy = true
+                    pinResult = viewModel.resetPin(memberId, pin)
+                    pinBusy = false
+                    if (pinResult == PinResult.Ok) {
+                        resetFor = null
+                        snackbarHostState.showSnackbar(resources.getString(R.string.feature_family_pin_reset_done, name))
+                    }
+                }
+            },
+            onDismiss = { resetFor = null },
+        )
+    }
 }
 
 @Composable
@@ -194,6 +266,11 @@ internal fun SpaceDetailScreen(
     onRemoveMember: (memberId: String) -> Unit,
     onLeaveSpace: () -> Unit,
     onDeleteSpace: () -> Unit,
+    /** Asks for the PIN of [ownerId], one's own or another member's, to show their locked documents. */
+    onUnlock: (ownerId: String) -> Unit,
+    onSetAllLocked: (Boolean) -> Unit,
+    onResetPin: (memberId: String) -> Unit,
+    onOpenActivity: () -> Unit,
 ) {
     var dialog by rememberSaveable { mutableStateOf(SpaceDialog.None) }
     var showMembers by rememberSaveable { mutableStateOf(false) }
@@ -215,14 +292,14 @@ internal fun SpaceDetailScreen(
                         IconButton(onClick = { showMembers = true }) {
                             AppIcon(AppIcons.Group, stringResource(R.string.feature_family_members))
                         }
-                        SpaceMenu(isOwner = ready.isOwner, onSelect = { dialog = it })
+                        SpaceMenu(ready, onSelect = { dialog = it }, onSetAllLocked = onSetAllLocked, onOpenActivity = onOpenActivity)
                     }
                 },
             )
         },
         floatingActionButton = {
             // The ink blue of every other main action, not Material's pad yellow.
-            PopIn(ready != null && ready.allDocuments.isNotEmpty()) {
+            PopIn(ready != null && !ready.isEmpty) {
                 ExtendedFloatingActionButton(
                     onClick = { ready?.let { onAddDocument(it.addFor) } },
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -242,7 +319,9 @@ internal fun SpaceDetailScreen(
         ) {
             LoadingCrossfade(ready == null) {
                 if (ready == null) return@LoadingCrossfade
-                if (ready.allDocuments.isEmpty()) {
+                // The welcome for a fresh space. A family already in it gets the list with its filters and
+                // its locked rows, even when nothing shows yet.
+                if (ready.isEmpty && ready.visibleMembers.size <= 1) {
                     EmptyState(
                         icon = AppIcons.Folder,
                         title = stringResource(R.string.feature_family_documents_empty_title),
@@ -253,7 +332,7 @@ internal fun SpaceDetailScreen(
                         }
                     }
                 } else {
-                    Documents(ready, onOpenDocument, onShowMember, onShowCategory, onShowFavorites, onSearch)
+                    Documents(ready, onOpenDocument, onShowMember, onShowCategory, onShowFavorites, onSearch, onUnlock)
                 }
             }
         }
@@ -270,6 +349,7 @@ internal fun SpaceDetailScreen(
             onCancelEmailInvite = onCancelEmailInvite,
             onSetRole = onSetRole,
             onRemoveMember = { memberToRemove = it },
+            onResetPin = onResetPin,
         )
     }
 
@@ -341,9 +421,12 @@ private fun Documents(
     onShowCategory: (DocumentCategory?) -> Unit,
     onShowFavorites: () -> Unit,
     onSearch: (String) -> Unit,
+    onUnlock: (ownerId: String) -> Unit,
 ) {
     val members = state.visibleMembers
     val names = members.associate { it.id to it.name }
+    val me = state.currentUserId
+    val lookingAt = state.filter.memberId
     LazyColumn(
         // Bottom room so the last row is not hidden behind the floating button.
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
@@ -419,6 +502,18 @@ private fun Documents(
                 }
             }
         }
+        // Locked documents wait behind a PIN: one's own behind one's own, another member's behind theirs.
+        if ((lookingAt == null || lookingAt == me) && state.ownLockedHidden) {
+            item("locked") {
+                LockedRow(pluralStringResource(R.plurals.feature_family_locked_own, state.lockedOwnCount, state.lockedOwnCount)) { onUnlock(me) }
+            }
+        } else if (lookingAt != null && lookingAt != me && lookingAt !in state.unlockedOwners) {
+            // shortcut: shows for every other member, even one with nothing locked (nobody may count another's
+            // locked documents), until a count is kept on the space.
+            item("locked") {
+                LockedRow(stringResource(R.string.feature_family_locked_of, names[lookingAt].orEmpty())) { onUnlock(lookingAt) }
+            }
+        }
         if (state.documents.isEmpty()) {
             item("nothing") {
                 Text(
@@ -446,9 +541,24 @@ private fun Documents(
 }
 
 @Composable
+private fun LockedRow(text: String, onUnlock: () -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            AppIcon(AppIcons.Lock, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text, Modifier.weight(1f).padding(horizontal = 12.dp), style = MaterialTheme.typography.bodyLarge)
+            TextButton(onClick = onUnlock) { Text(stringResource(CoreR.string.core_ui_unlock)) }
+        }
+    }
+}
+
+@Composable
 private fun DocumentCard(document: Document, ownerName: String?, today: Long, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val touch = remember { MutableInteractionSource() }
     val favoriteLabel = stringResource(R.string.feature_family_favorite)
+    val lockedLabel = stringResource(R.string.feature_family_locked)
     ElevatedCard(
         onClick = onClick,
         modifier = modifier.pressScale(touch).fillMaxWidth().semantics { role = Role.Button },
@@ -469,8 +579,13 @@ private fun DocumentCard(document: Document, ownerName: String?, today: Long, on
                 )
                 Text(parts.joinToString(" · "), maxLines = 2, overflow = TextOverflow.Ellipsis)
             },
-            trailingContent = if (document.isFavorite) {
-                { AppIcon(AppIcons.Star, favoriteLabel, tint = MaterialTheme.colorScheme.tertiary) }
+            trailingContent = if (document.isFavorite || document.isLocked) {
+                {
+                    Row {
+                        if (document.isLocked) AppIcon(AppIcons.Lock, lockedLabel, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (document.isFavorite) AppIcon(AppIcons.Star, favoriteLabel, tint = MaterialTheme.colorScheme.tertiary)
+                    }
+                }
             } else {
                 null
             },
@@ -509,7 +624,7 @@ private fun ExpiringCard(expiring: List<Document>, today: Long, names: Map<Strin
 }
 
 @Composable
-private fun SpaceMenu(isOwner: Boolean, onSelect: (SpaceDialog) -> Unit) {
+private fun SpaceMenu(state: SpaceDetailUiState.Ready, onSelect: (SpaceDialog) -> Unit, onSetAllLocked: (Boolean) -> Unit, onOpenActivity: () -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     val select = { target: SpaceDialog ->
         expanded = false
@@ -520,7 +635,38 @@ private fun SpaceMenu(isOwner: Boolean, onSelect: (SpaceDialog) -> Unit) {
             AppIcon(AppIcons.MoreVert, stringResource(CoreR.string.core_ui_more_options))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            if (isOwner) {
+            if (state.isAdult) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.feature_family_activity)) },
+                    leadingIcon = { AppIcon(AppIcons.History, null) },
+                    onClick = {
+                        expanded = false
+                        onOpenActivity()
+                    },
+                )
+            }
+            // Locking takes a PIN. Unlocking everything takes the locked ones being open already, or no PIN left to ask for.
+            if (state.hasPin && state.ownDocuments.any { !it.isLocked }) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.feature_family_lock_all)) },
+                    leadingIcon = { AppIcon(AppIcons.Lock, null) },
+                    onClick = {
+                        expanded = false
+                        onSetAllLocked(true)
+                    },
+                )
+            }
+            if (state.lockedOwnCount > 0 && !state.ownLockedHidden) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.feature_family_unlock_all)) },
+                    leadingIcon = { AppIcon(AppIcons.LockOpen, null) },
+                    onClick = {
+                        expanded = false
+                        onSetAllLocked(false)
+                    },
+                )
+            }
+            if (state.isOwner) {
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.feature_family_rename_space)) },
                     leadingIcon = { AppIcon(AppIcons.Edit, null) },
@@ -555,6 +701,7 @@ private fun MembersSheet(
     onCancelEmailInvite: (String) -> Unit,
     onSetRole: (memberId: String, MemberRole) -> Unit,
     onRemoveMember: (memberId: String) -> Unit,
+    onResetPin: (memberId: String) -> Unit,
 ) {
     val space = state.space
     ModalBottomSheet(
@@ -634,6 +781,12 @@ private fun MembersSheet(
                         } else {
                             null
                         },
+                        // A child who forgot their PIN gets a new one from an adult (resetPin in firebase/functions says the same).
+                        onResetPin = if (state.isAdult && !isYou && member.role == MemberRole.CHILD) {
+                            { onResetPin(member.id) }
+                        } else {
+                            null
+                        },
                     )
                 }
             }
@@ -703,7 +856,14 @@ private fun EmailInviteField(onInviteEmail: (String) -> Unit) {
 }
 
 @Composable
-private fun MemberRow(member: Member, isYou: Boolean, isSpaceOwner: Boolean, onSetRole: (() -> Unit)?, onRemove: (() -> Unit)?) {
+private fun MemberRow(
+    member: Member,
+    isYou: Boolean,
+    isSpaceOwner: Boolean,
+    onSetRole: (() -> Unit)?,
+    onRemove: (() -> Unit)?,
+    onResetPin: (() -> Unit)?,
+) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         InitialAvatar(member.name)
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
@@ -727,6 +887,11 @@ private fun MemberRow(member: Member, isYou: Boolean, isSpaceOwner: Boolean, onS
             val label = stringResource(if (toAdult) R.string.feature_family_make_adult else R.string.feature_family_make_child, member.name)
             TextButton(onClick = onSetRole, modifier = Modifier.semantics { contentDescription = label }) {
                 Text(stringResource(if (toAdult) R.string.feature_family_adult else R.string.feature_family_child))
+            }
+        }
+        if (onResetPin != null) {
+            IconButton(onClick = onResetPin) {
+                AppIcon(AppIcons.Lock, stringResource(R.string.feature_family_reset_pin, member.name))
             }
         }
         if (onRemove != null) {
@@ -787,6 +952,10 @@ private fun SpaceDetailScreenPreview() {
             onRemoveMember = {},
             onLeaveSpace = {},
             onDeleteSpace = {},
+            onUnlock = {},
+            onSetAllLocked = {},
+            onResetPin = {},
+            onOpenActivity = {},
         )
     }
 }

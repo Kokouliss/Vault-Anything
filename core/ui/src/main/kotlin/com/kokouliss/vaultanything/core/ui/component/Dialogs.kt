@@ -81,7 +81,8 @@ fun TextInputDialog(
                 visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
                 keyboardOptions = KeyboardOptions(
                     capitalization = if (isPassword) KeyboardCapitalization.None else capitalization,
-                    keyboardType = if (isPassword) KeyboardType.Password else keyboardType,
+                    // A PIN asks for the number keyboard and is hidden all the same.
+                    keyboardType = if (isPassword && keyboardType == KeyboardType.Text) KeyboardType.Password else keyboardType,
                     imeAction = ImeAction.Done,
                 ),
                 keyboardActions = KeyboardActions(onDone = { submit() }),

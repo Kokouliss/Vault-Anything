@@ -78,4 +78,6 @@ private class FakeAuthRepository : AuthRepository {
     override suspend fun signOut() = Unit
     override suspend fun deleteAccount(idToken: String) = true
     override suspend fun deleteAccountWithPassword(password: String) = true
+    override suspend fun confirmIdentity(idToken: String) = true
+    override suspend fun confirmIdentityWithPassword(password: String) = true
 }

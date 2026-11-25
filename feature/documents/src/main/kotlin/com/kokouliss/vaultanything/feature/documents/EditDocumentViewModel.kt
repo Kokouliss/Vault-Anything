@@ -126,13 +126,19 @@ internal class EditDocumentViewModel @AssistedInject constructor(
 
     fun setTitle(title: String) = state.update { it.copy(title = title.take(MAX_TITLE_LENGTH)) }
 
-    /** [name] is what the picker called the file; it becomes the title when there is none yet. */
-    fun setFile(uri: String, name: String) = state.update {
-        it.copy(
-            attachment = Attachment.File(uri, name),
-            title = it.title.ifBlank { name.substringBeforeLast('.').take(MAX_TITLE_LENGTH) },
-            error = null,
-        )
+    /**
+     * [name] is what the picker called the file; it becomes the title when there is none yet. With
+     * [readTitle], for a scan or a photo whose name says nothing, the first line of words on it
+     * takes that place a moment later, unless the person typed a title meanwhile.
+     */
+    fun setFile(uri: String, name: String, readTitle: Boolean = false) {
+        val fromName = name.substringBeforeLast('.').take(MAX_TITLE_LENGTH)
+        state.update { it.copy(attachment = Attachment.File(uri, name), title = it.title.ifBlank { fromName }, error = null) }
+        if (!readTitle) return
+        viewModelScope.launch {
+            val suggested = documentRepository.suggestTitle(uri) ?: return@launch
+            state.update { if (it.attachment == Attachment.File(uri, name) && it.title == fromName) it.copy(title = suggested) else it }
+        }
     }
 
     fun setLink(text: String) = state.update { it.copy(attachment = Attachment.Link(text), error = null) }

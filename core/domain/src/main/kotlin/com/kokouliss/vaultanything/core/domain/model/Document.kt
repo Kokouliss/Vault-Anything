@@ -76,6 +76,8 @@ data class Document(
     val thumbnail: ImageData? = null,
     /** The words read off a picture or a PDF on the phone, for search. Nothing for a link or a file without words. */
     val text: String? = null,
+    /** Behind the owner's PIN: hidden from the list, and from other adults, until it is given. */
+    val isLocked: Boolean = false,
     val addedByName: String = "",
     val createdAtMillis: Long = 0L,
     val updatedAtMillis: Long = 0L,

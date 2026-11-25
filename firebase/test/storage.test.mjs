@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { after, before, beforeEach, test } from 'node:test';
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing';
-import { doc, setDoc } from 'firebase/firestore';
+import { Timestamp, doc, setDoc } from 'firebase/firestore';
 import { deleteObject, getBytes, ref, uploadBytes } from 'firebase/storage';
 
 let env;
@@ -21,7 +21,8 @@ after(() => env.cleanup());
 
 const path = (documentId) => `spaces/s1/documents/${documentId}/file`;
 
-// The same family as in rules.test.mjs, with the kid's record written and its file not uploaded yet.
+// The same family as in rules.test.mjs, with the kid's record written and its file not uploaded yet,
+// and a locked document of the member.
 // clearStorage() only sees files at the root of the bucket, so the nested files are removed by name.
 const removeFile = (context, documentId) =>
   deleteObject(ref(context.storage(), path(documentId))).catch((e) => {
@@ -31,7 +32,7 @@ const removeFile = (context, documentId) =>
 beforeEach(async () => {
   await env.clearFirestore();
   await env.withSecurityRulesDisabled(async (context) => {
-    await Promise.all(['kids', 'members', 'owners'].map((id) => removeFile(context, id)));
+    await Promise.all(['kids', 'members', 'owners', 'secrets'].map((id) => removeFile(context, id)));
     const db = context.firestore();
     await setDoc(doc(db, 'spaces/s1'), {
       name: 'Family',
@@ -42,12 +43,14 @@ beforeEach(async () => {
       invitedEmails: [],
       createdAt: new Date(),
     });
-    const record = (ownerId) => ({ ownerId, title: 'Scan', kind: 'file', category: 'other', tags: [], favorite: false, fileName: 'scan.pdf', mimeType: 'application/pdf', sizeBytes: 3, uploaded: false, addedById: ownerId, addedByName: 'Someone', createdAt: new Date(), updatedAt: new Date() });
+    const record = (ownerId, extra = {}) => ({ ownerId, title: 'Scan', kind: 'file', category: 'other', tags: [], favorite: false, fileName: 'scan.pdf', mimeType: 'application/pdf', sizeBytes: 3, uploaded: false, addedById: ownerId, addedByName: 'Someone', createdAt: new Date(), updatedAt: new Date(), ...extra });
     await setDoc(doc(db, 'spaces/s1/documents/kids'), record('kid'));
     await setDoc(doc(db, 'spaces/s1/documents/members'), record('member'));
     await setDoc(doc(db, 'spaces/s1/documents/owners'), record('owner'));
+    await setDoc(doc(db, 'spaces/s1/documents/secrets'), record('member', { locked: true }));
     await uploadBytes(ref(context.storage(), path('owners')), new Uint8Array(3));
     await uploadBytes(ref(context.storage(), path('members')), new Uint8Array(3));
+    await uploadBytes(ref(context.storage(), path('secrets')), new Uint8Array(3));
   });
 });
 
@@ -73,6 +76,17 @@ test("adults download everyone's files, children only their own", async () => {
   await assertSucceeds(download('member', 'owners'));
   await assertFails(download('kid', 'owners'));
   await assertFails(download('stranger', 'owners'));
+});
+
+test("the file of a locked document opens for its owner, and for an adult who gave the owner's PIN a short while ago", async () => {
+  const download = (uid, documentId) => getBytes(ref(storage(uid), path(documentId)));
+  await assertSucceeds(download('member', 'secrets'));
+  await assertFails(download('owner', 'secrets'));
+  await env.withSecurityRulesDisabled((context) =>
+    setDoc(doc(context.firestore(), 'spaces/s1/unlocks/owner'), { grants: { member: Timestamp.fromMillis(Date.now() + 60_000) } }),
+  );
+  await assertSucceeds(download('owner', 'secrets'));
+  await assertFails(download('kid', 'secrets'));
 });
 
 test('nobody deletes a file by hand', async () => {

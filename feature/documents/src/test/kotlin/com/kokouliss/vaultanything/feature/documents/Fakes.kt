@@ -1,5 +1,6 @@
 package com.kokouliss.vaultanything.feature.documents
 
+import com.kokouliss.vaultanything.core.domain.model.ActivityEntry
 import com.kokouliss.vaultanything.core.domain.model.Document
 import com.kokouliss.vaultanything.core.domain.model.DocumentDetails
 import com.kokouliss.vaultanything.core.domain.model.DocumentKind
@@ -7,13 +8,17 @@ import com.kokouliss.vaultanything.core.domain.model.JoinResult
 import com.kokouliss.vaultanything.core.domain.model.Role
 import com.kokouliss.vaultanything.core.domain.model.Space
 import com.kokouliss.vaultanything.core.domain.model.User
+import com.kokouliss.vaultanything.core.domain.repository.ActivityRepository
 import com.kokouliss.vaultanything.core.domain.repository.AddResult
 import com.kokouliss.vaultanything.core.domain.repository.AuthRepository
 import com.kokouliss.vaultanything.core.domain.repository.DocumentRepository
 import com.kokouliss.vaultanything.core.domain.repository.EmailAuthResult
+import com.kokouliss.vaultanything.core.domain.repository.LockRepository
+import com.kokouliss.vaultanything.core.domain.repository.PinResult
 import com.kokouliss.vaultanything.core.domain.repository.SpaceRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
@@ -29,6 +34,8 @@ internal class FakeAuthRepository(user: User = User("u1", "Panos", "panos@exampl
     override suspend fun sendVerificationEmail() = true
     override suspend fun refreshEmailVerification() = Unit
     override suspend fun deleteAccountWithPassword(password: String) = true
+    override suspend fun confirmIdentity(idToken: String) = true
+    override suspend fun confirmIdentityWithPassword(password: String) = true
     override val asksForName: Flow<Boolean> = flowOf(false)
     override suspend fun setName(name: String) = true
     override fun keepName() = Unit
@@ -64,6 +71,9 @@ internal class FakeDocumentRepository : DocumentRepository {
     override fun observeDocuments(spaceId: String, userId: String, isAdult: Boolean): Flow<List<Document>> =
         documents.map { all -> if (isAdult) all else all.filter { it.ownerId == userId } }
 
+    override fun observeLockedDocuments(spaceId: String, ownerId: String): Flow<List<Document>> =
+        documents.map { all -> all.filter { it.ownerId == ownerId && it.isLocked } }
+
     override fun observeDocument(spaceId: String, documentId: String): Flow<Document?> =
         documents.map { all -> all.firstOrNull { it.id == documentId } }
 
@@ -85,9 +95,41 @@ internal class FakeDocumentRepository : DocumentRepository {
         favorites += documentId to favorite
     }
 
+    override suspend fun setLocked(document: Document, locked: Boolean) {
+        documents.value = documents.value.map { if (it.id == document.id) it.copy(isLocked = locked) else it }
+    }
+
+    override suspend fun suggestTitle(sourceUri: String): String? = null
+
     override suspend fun delete(document: Document) {
         deleted += document.id
     }
 
     override suspend fun fetchFile(document: Document): String? = null
+}
+
+internal class FakeLockRepository(hasPin: Boolean = false) : LockRepository {
+    override val hasPin = MutableStateFlow(hasPin)
+    override val unlockedOwners = MutableStateFlow(emptySet<String>())
+    var pin = "1234"
+
+    override suspend fun setPin(pin: String, current: String?) = PinResult.Ok
+    override suspend fun removePin(current: String?) = PinResult.Ok
+    override suspend fun unlock(spaceId: String, ownerId: String, pin: String): PinResult {
+        if (pin != this.pin) return PinResult.Wrong
+        unlockedOwners.value += ownerId
+        return PinResult.Ok
+    }
+    override fun unlockSelf() {
+        unlockedOwners.value += "u1"
+    }
+    override suspend fun resetPin(spaceId: String, memberId: String, pin: String) = PinResult.Ok
+}
+
+internal class FakeActivityRepository : ActivityRepository {
+    val opened = mutableListOf<String>()
+    override fun observeActivity(spaceId: String): Flow<List<ActivityEntry>> = flowOf(emptyList())
+    override suspend fun logOpened(document: Document) {
+        opened += document.id
+    }
 }

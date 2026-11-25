@@ -99,14 +99,14 @@ internal fun EditDocumentRoute(viewModel: EditDocumentViewModel, onBack: () -> U
     // The camera writes here; the file is uploaded from here, so one file is enough.
     val captureUri = remember { captureUri(context) }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
-        if (saved) viewModel.setFile(captureUri.toString(), "photo.jpg")
+        if (saved) viewModel.setFile(captureUri.toString(), "photo.jpg", readTitle = true)
     }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.setFile(uri.toString(), context.displayName(uri))
     }
     val activity = LocalActivity.current
     val scanner = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
-        GmsDocumentScanningResult.fromActivityResultIntent(result.data)?.pdf?.uri?.let { viewModel.setFile(it.toString(), "scan.pdf") }
+        GmsDocumentScanningResult.fromActivityResultIntent(result.data)?.pdf?.uri?.let { viewModel.setFile(it.toString(), "scan.pdf", readTitle = true) }
     }
     // A shared file comes without its name; the picker's name is looked up the same way.
     LaunchedEffect(uiState.attachment) {

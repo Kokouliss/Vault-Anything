@@ -9,6 +9,7 @@ import com.kokouliss.vaultanything.core.domain.model.Member
 import com.kokouliss.vaultanything.core.domain.model.Role
 import com.kokouliss.vaultanything.core.domain.model.Space
 import com.kokouliss.vaultanything.core.domain.model.User
+import com.kokouliss.vaultanything.core.domain.repository.PinResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -39,8 +40,11 @@ class DocumentDetailViewModelTest {
     @After
     fun tearDown() = Dispatchers.resetMain()
 
+    private val locks = FakeLockRepository(hasPin = true)
+    private val activity = FakeActivityRepository()
+
     private fun viewModel(documentId: String, user: User) =
-        DocumentDetailViewModel(DocumentDetailKey("s1", documentId), documents, spaces, FakeAuthRepository(user))
+        DocumentDetailViewModel(DocumentDetailKey("s1", documentId), documents, spaces, FakeAuthRepository(user), locks, activity)
 
     @Test
     fun `an adult edits a child's document but not another adult's`() = runTest {
@@ -53,6 +57,23 @@ class DocumentDetailViewModelTest {
         viewModel("d2", panos).uiState.test {
             assertThat((expectMostRecentItem() as DocumentDetailUiState.Ready).canEdit).isFalse()
         }
+    }
+
+    @Test
+    fun `a locked document is sealed for its owner until the PIN is given, and opening another's is logged`() = runTest {
+        documents.documents.value = documents.documents.value + Document("d3", "s1", "u2", "Diary", DocumentKind.FILE, DocumentDetails(), isLocked = true)
+        val viewModel = viewModel("d3", User("u2", "Maria", null))
+        viewModel.uiState.test {
+            var state = expectMostRecentItem() as DocumentDetailUiState.Ready
+            assertThat(state.isSealed).isTrue()
+            assertThat(state.canLock).isTrue()
+            assertThat(viewModel.unlock("1234")).isEqualTo(PinResult.Ok)
+            state = expectMostRecentItem() as DocumentDetailUiState.Ready
+            assertThat(state.isSealed).isFalse()
+        }
+        assertThat(activity.opened).isEmpty()
+        viewModel("d1", User("u1", "Panos", null)).uiState.test { expectMostRecentItem() }
+        assertThat(activity.opened).containsExactly("d1")
     }
 
     @Test

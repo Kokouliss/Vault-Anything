@@ -12,6 +12,7 @@ import com.kokouliss.vaultanything.core.domain.model.Space
 import com.kokouliss.vaultanything.core.domain.model.User
 import com.kokouliss.vaultanything.core.domain.repository.AddResult
 import com.kokouliss.vaultanything.core.domain.repository.DocumentRepository
+import com.kokouliss.vaultanything.core.domain.repository.PinResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,7 +44,9 @@ class SpaceDetailViewModelTest {
     @After
     fun tearDown() = Dispatchers.resetMain()
 
-    private fun viewModel(user: User) = SpaceDetailViewModel(SpaceDetailKey("s1"), spaces, documents, FakeAuthRepository(user))
+    private val locks = FakeLockRepository(hasPin = true)
+
+    private fun viewModel(user: User) = SpaceDetailViewModel(SpaceDetailKey("s1"), spaces, documents, FakeAuthRepository(user), locks)
 
     @Test
     fun `an adult sees everyone's documents, a child only their own`() = runTest {
@@ -104,6 +107,29 @@ class SpaceDetailViewModelTest {
     }
 
     @Test
+    fun `locked documents wait behind their owner's PIN`() = runTest {
+        val diary = report.copy(id = "d3", title = "Diary", isLocked = true)
+        val secret = passport.copy(id = "d4", title = "Test result", isLocked = true)
+        documents.documents.value = listOf(passport, report, diary, secret)
+        val viewModel = viewModel(User("u1", "Panos", null))
+        viewModel.uiState.test {
+            var state = expectMostRecentItem() as SpaceDetailUiState.Ready
+            assertThat(state.allDocuments).containsExactly(passport, report)
+            assertThat(state.lockedOwnCount).isEqualTo(1)
+            assertThat(state.ownLockedHidden).isTrue()
+
+            assertThat(viewModel.unlock("u1", "0000")).isEqualTo(PinResult.Wrong)
+            assertThat(viewModel.unlock("u1", "1234")).isEqualTo(PinResult.Ok)
+            state = expectMostRecentItem() as SpaceDetailUiState.Ready
+            assertThat(state.allDocuments).containsExactly(passport, report, secret)
+            assertThat(state.ownLockedHidden).isFalse()
+
+            viewModel.unlock("u3", "1234")
+            assertThat((expectMostRecentItem() as SpaceDetailUiState.Ready).allDocuments).containsExactly(passport, report, secret, diary)
+        }
+    }
+
+    @Test
     fun `a member who left takes their filter with them`() = runTest {
         val viewModel = viewModel(User("u1", "Panos", null))
         viewModel.uiState.test {
@@ -115,13 +141,16 @@ class SpaceDetailViewModelTest {
 }
 
 private class FakeDocumentRepository(all: List<Document>) : DocumentRepository {
-    private val documents = MutableStateFlow(all)
+    val documents = MutableStateFlow(all)
     var lastQuery: Pair<String, Boolean>? = null
 
     override fun observeDocuments(spaceId: String, userId: String, isAdult: Boolean): Flow<List<Document>> {
         lastQuery = userId to isAdult
         return documents.map { all -> if (isAdult) all else all.filter { it.ownerId == userId } }
     }
+
+    override fun observeLockedDocuments(spaceId: String, ownerId: String): Flow<List<Document>> =
+        documents.map { all -> all.filter { it.ownerId == ownerId && it.isLocked } }
 
     override fun observeDocument(spaceId: String, documentId: String): Flow<Document?> =
         documents.map { all -> all.firstOrNull { it.id == documentId } }
@@ -130,6 +159,8 @@ private class FakeDocumentRepository(all: List<Document>) : DocumentRepository {
     override suspend fun addFile(spaceId: String, ownerId: String, title: String, sourceUri: String, details: DocumentDetails): AddResult = AddResult.Added("new")
     override suspend fun update(spaceId: String, documentId: String, title: String, details: DocumentDetails) = Unit
     override suspend fun setFavorite(spaceId: String, documentId: String, favorite: Boolean) = Unit
+    override suspend fun setLocked(document: Document, locked: Boolean) = Unit
+    override suspend fun suggestTitle(sourceUri: String): String? = null
     override suspend fun delete(document: Document) = Unit
     override suspend fun fetchFile(document: Document): String? = null
 }

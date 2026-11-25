@@ -134,6 +134,21 @@ internal class FirebaseAuthRepository @Inject constructor(
         auth.signOut()
     }
 
+    override suspend fun confirmIdentity(idToken: String): Boolean = confirm(GoogleAuthProvider.getCredential(idToken, null))
+
+    override suspend fun confirmIdentityWithPassword(password: String): Boolean {
+        val email = auth.currentUser?.email ?: return false
+        return confirm(EmailAuthProvider.getCredential(email, password))
+    }
+
+    private suspend fun confirm(proof: AuthCredential): Boolean = try {
+        auth.requireUser().reauthenticate(proof).await()
+        true
+    } catch (e: FirebaseException) {
+        Log.w("VaultAnythingAuth", "Could not confirm the sign-in", e)
+        false
+    }
+
     override suspend fun deleteAccount(idToken: String): Boolean =
         deleteAccountAfter(GoogleAuthProvider.getCredential(idToken, null))
 

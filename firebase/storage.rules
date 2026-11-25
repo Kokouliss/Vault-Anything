@@ -33,7 +33,17 @@ service firebase.storage {
         return ownerId == uid() || (roleOf(uid()) == 'adult' && roleOf(ownerId) != 'adult');
       }
 
-      allow read: if isMember() && (record().ownerId == uid() || roleOf(uid()) == 'adult');
+      // An adult gave verifyPin in firebase/functions the owner's PIN a short while ago (see the
+      // documents rules in firestore.rules).
+      function unlocked(ownerId) {
+        return firestore.exists(/databases/(default)/documents/spaces/$(spaceId)/unlocks/$(uid()))
+          && ownerId in firestore.get(/databases/(default)/documents/spaces/$(spaceId)/unlocks/$(uid())).data.grants
+          && firestore.get(/databases/(default)/documents/spaces/$(spaceId)/unlocks/$(uid())).data.grants[ownerId] > request.time;
+      }
+
+      // The owner, or an adult, who needs the PIN for a locked document of someone else.
+      allow read: if isMember() && (record().ownerId == uid()
+        || (roleOf(uid()) == 'adult' && (record().get('locked', false) != true || unlocked(record().ownerId))));
 
       // Written once, under 25 MB (MAX_FILE_BYTES in the app), for a record the caller may manage.
       // "resource == null" says the file is new: the emulator checks an overwrite as a create too.

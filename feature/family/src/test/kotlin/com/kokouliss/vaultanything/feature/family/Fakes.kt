@@ -6,6 +6,8 @@ import com.kokouliss.vaultanything.core.domain.model.Space
 import com.kokouliss.vaultanything.core.domain.model.User
 import com.kokouliss.vaultanything.core.domain.repository.AuthRepository
 import com.kokouliss.vaultanything.core.domain.repository.EmailAuthResult
+import com.kokouliss.vaultanything.core.domain.repository.LockRepository
+import com.kokouliss.vaultanything.core.domain.repository.PinResult
 import com.kokouliss.vaultanything.core.domain.repository.SpaceRepository
 import java.io.IOException
 import kotlinx.coroutines.flow.Flow
@@ -28,6 +30,8 @@ internal class FakeAuthRepository(user: User = User("u1", "Panos", "panos@exampl
     override suspend fun sendVerificationEmail() = true
     override suspend fun refreshEmailVerification() = Unit
     override suspend fun deleteAccountWithPassword(password: String) = true
+    override suspend fun confirmIdentity(idToken: String) = true
+    override suspend fun confirmIdentityWithPassword(password: String) = true
     override val asksForName: Flow<Boolean> = flowOf(false)
     override suspend fun setName(name: String) = true
     override fun keepName() = Unit
@@ -62,4 +66,25 @@ internal class FakeSpaceRepository(initial: Space? = null) : SpaceRepository {
     override suspend fun setRole(spaceId: String, memberId: String, role: Role) = Unit
     override suspend fun leaveSpace(spaceId: String) = Unit
     override suspend fun deleteSpace(space: Space) = Unit
+}
+
+internal class FakeLockRepository(hasPin: Boolean = false) : LockRepository {
+    override val hasPin = MutableStateFlow(hasPin)
+    override val unlockedOwners = MutableStateFlow(emptySet<String>())
+    val resets = mutableListOf<Pair<String, String>>()
+
+    override suspend fun setPin(pin: String, current: String?) = PinResult.Ok
+    override suspend fun removePin(current: String?) = PinResult.Ok
+    override suspend fun unlock(spaceId: String, ownerId: String, pin: String): PinResult {
+        if (pin != "1234") return PinResult.Wrong
+        unlockedOwners.value += ownerId
+        return PinResult.Ok
+    }
+    override fun unlockSelf() {
+        unlockedOwners.value += "u1"
+    }
+    override suspend fun resetPin(spaceId: String, memberId: String, pin: String): PinResult {
+        resets += memberId to pin
+        return PinResult.Ok
+    }
 }

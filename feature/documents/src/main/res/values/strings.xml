@@ -17,6 +17,15 @@
     <string name="feature_documents_added_by">Added by %1$s</string>
     <string name="feature_documents_expires_on">Valid until %1$s</string>
     <string name="feature_documents_note">Note</string>
+    <string name="feature_documents_lock">Lock</string>
+    <string name="feature_documents_remove_lock">Remove lock</string>
+    <string name="feature_documents_locked_title">Locked</string>
+    <string name="feature_documents_locked_body">Only you can open it: with your PIN, or with your fingerprint, face or screen lock.</string>
+    <string name="feature_documents_unlock_prompt">Open your locked document</string>
+    <string name="feature_documents_your_pin">Your PIN</string>
+    <string name="feature_documents_words">Words on it</string>
+    <string name="feature_documents_copy_words">Copy the words</string>
+    <string name="feature_documents_copied">Copied</string>
 
     <string name="feature_documents_add_title">Add document</string>
     <string name="feature_documents_edit_title">Edit document</string>

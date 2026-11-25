@@ -34,6 +34,7 @@ const MEMBERS_TEST = `${DOCUMENTS}/d3`;
 const OWNERS_SECRET = `${DOCUMENTS}/d4`;
 const KIDS_SECRET = `${DOCUMENTS}/d5`;
 const ACTIVITY = `${SPACE}/activity`;
+const KIDS_LINK = 'shares/abcdefghijklmnopqrstuv';
 
 let env;
 
@@ -67,8 +68,26 @@ beforeEach(async () => {
     await setDoc(doc(db, MEMBERS_TEST), stored('member', 'Blood test'));
     await setDoc(doc(db, OWNERS_SECRET), stored('owner', 'Test result', { locked: true }));
     await setDoc(doc(db, KIDS_SECRET), stored('kid', 'Diary', { locked: true }));
+    await setDoc(doc(db, KIDS_LINK), {
+      spaceId: 's1',
+      documentId: 'd2',
+      ownerId: 'kid',
+      createdById: 'owner',
+      createdByName: 'Owner',
+      title: 'School report',
+      fileName: 'report.pdf',
+      token: 'secret',
+      url: 'https://vault-anything.web.app/s/abcdefghijklmnopqrstuv',
+      expiresAt: Timestamp.fromMillis(Date.now() + 3_600_000),
+      createdAt: new Date(),
+    });
   });
 });
+
+/** The query the app sends for the links of a document (see observeShares in core/data). */
+function linksOf(db, documentId, ownerId) {
+  return getDocs(query(collection(db, 'shares'), where('spaceId', '==', 's1'), where('documentId', '==', documentId), where('ownerId', '==', ownerId)));
+}
 
 /** A file document as the server holds it. */
 function stored(ownerId, title, extra = {}) {
@@ -407,6 +426,20 @@ test('members log what they did with a document, adults read the log, and nothin
   await assertFails(log(stranger()));
   await assertFails(updateDoc(doc(member(), `${ACTIVITY}/a1`), { action: 'added' }));
   await assertFails(deleteDoc(doc(owner(), `${ACTIVITY}/a1`)));
+});
+
+test("the owner and the adults list a document's share links; nobody writes one", async () => {
+  await assertSucceeds(linksOf(kid(), 'd2', 'kid'));
+  await assertSucceeds(linksOf(owner(), 'd2', 'kid'));
+  await assertSucceeds(linksOf(member(), 'd2', 'kid'));
+  await assertSucceeds(getDoc(doc(kid(), KIDS_LINK)));
+  await assertFails(linksOf(kid(), 'd1', 'owner'));
+  await assertFails(linksOf(stranger(), 'd2', 'kid'));
+  await assertFails(getDocs(collection(kid(), 'shares')));
+  await assertFails(getDocs(query(collection(kid(), 'shares'), where('spaceId', '==', 's1'))));
+  await assertFails(deleteDoc(doc(owner(), KIDS_LINK)));
+  await assertFails(updateDoc(doc(owner(), KIDS_LINK), { expiresAt: Timestamp.fromMillis(Date.now() + 86_400_000) }));
+  await assertFails(setDoc(doc(owner(), 'shares/wxyzabcdefghijklmnopqr'), { spaceId: 's1', documentId: 'd1', ownerId: 'owner', token: 't', url: 'x', expiresAt: new Date() }));
 });
 
 test('a person reads whether they have a PIN, and nothing else about PINs or unlocks', async () => {

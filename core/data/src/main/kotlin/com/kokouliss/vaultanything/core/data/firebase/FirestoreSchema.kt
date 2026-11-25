@@ -15,6 +15,7 @@ import com.kokouliss.vaultanything.core.domain.model.DocumentKind
 import com.kokouliss.vaultanything.core.domain.model.ImageData
 import com.kokouliss.vaultanything.core.domain.model.Member
 import com.kokouliss.vaultanything.core.domain.model.Role
+import com.kokouliss.vaultanything.core.domain.model.Share
 import com.kokouliss.vaultanything.core.domain.model.Space
 import com.kokouliss.vaultanything.core.domain.model.normalizeLink
 import kotlinx.coroutines.channels.awaitClose
@@ -37,6 +38,9 @@ import kotlinx.coroutines.flow.distinctUntilChangedBy
 // users/{uid}                              hasPin. Written by setPin in firebase/functions; the PIN's hash sits under users/{uid}/private/lock,
 //                                          which no phone reads.
 // users/{uid}/tokens/{token}               updatedAt. One per device that gets this person's notifications.
+// shares/{shareId}                         spaceId, documentId, ownerId, createdById, createdByName, title, fileName, token, url,
+//                                          expiresAt, createdAt. A link to one file for anyone, until expiresAt. Written by
+//                                          shareDocument in firebase/functions; the phone only lists a document's links.
 //
 // The file of a document is in Cloud Storage at spaces/{spaceId}/documents/{documentId}/{fileName}.
 
@@ -47,6 +51,7 @@ internal object Collections {
     const val USERS = "users"
     const val TOKENS = "tokens"
     const val ACTIVITY = "activity"
+    const val SHARES = "shares"
 }
 
 internal object Fields {
@@ -86,6 +91,9 @@ internal object Fields {
     const val DOCUMENT_TITLE = "documentTitle"
     const val MEMBER_ID = "memberId"
     const val MEMBER_NAME = "memberName"
+    const val CREATED_BY_NAME = "createdByName"
+    const val EXPIRES_AT = "expiresAt"
+    const val URL = "url"
 }
 
 internal fun DocumentSnapshot.toSpace(): Space? {
@@ -154,6 +162,17 @@ internal fun DocumentSnapshot.toActivityEntry(): ActivityEntry? {
         documentTitle = getString(Fields.DOCUMENT_TITLE),
         memberId = getString(Fields.MEMBER_ID),
         memberName = getString(Fields.MEMBER_NAME),
+    )
+}
+
+internal fun DocumentSnapshot.toShare(): Share? {
+    val url = getString(Fields.URL) ?: return null
+    return Share(
+        id = id,
+        documentId = getString(Fields.DOCUMENT_ID).orEmpty(),
+        createdByName = getString(Fields.CREATED_BY_NAME).orEmpty(),
+        expiresAtMillis = getTimestamp(Fields.EXPIRES_AT)?.toDate()?.time ?: 0L,
+        url = url,
     )
 }
 

@@ -5,6 +5,8 @@ enum class ActivityAction(val key: String) {
     ADDED("added"),
     OPENED("opened"),
     DELETED("deleted"),
+    /** Made a link to a document's file for someone outside the family. */
+    SHARED("shared"),
     /** An adult gave a child a new PIN. Written by firebase/functions. */
     PIN_RESET("pin_reset");
 

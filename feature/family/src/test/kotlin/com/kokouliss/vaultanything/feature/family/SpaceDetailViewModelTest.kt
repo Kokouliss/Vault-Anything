@@ -8,6 +8,7 @@ import com.kokouliss.vaultanything.core.domain.model.DocumentDetails
 import com.kokouliss.vaultanything.core.domain.model.DocumentKind
 import com.kokouliss.vaultanything.core.domain.model.Member
 import com.kokouliss.vaultanything.core.domain.model.Role
+import com.kokouliss.vaultanything.core.domain.model.Share
 import com.kokouliss.vaultanything.core.domain.model.Space
 import com.kokouliss.vaultanything.core.domain.model.User
 import com.kokouliss.vaultanything.core.domain.repository.AddResult
@@ -163,4 +164,9 @@ private class FakeDocumentRepository(all: List<Document>) : DocumentRepository {
     override suspend fun suggestTitle(sourceUri: String): String? = null
     override suspend fun delete(document: Document) = Unit
     override suspend fun fetchFile(document: Document): String? = null
+    override fun observeShares(document: Document): Flow<List<Share>> = MutableStateFlow(emptyList())
+    override suspend fun share(document: Document, hours: Int): Share? = null
+    override suspend fun unshare(shareId: String) = true
+    override suspend fun isKept(document: Document) = false
+    override suspend fun setKept(document: Document, kept: Boolean) = true
 }

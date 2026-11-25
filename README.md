@@ -11,7 +11,9 @@ A family document vault for Android. Create a family space, invite the others, a
 - **The words on a scan** show under the document, with a Copy button, so a number or a name on a paper is copied instead of typed. A scan or a photo gets its **title suggested** from the first line of words on it.
 - **A PIN** (4 to 8 digits, set on the profile page) locks a document, or all of one's documents at once. A locked document is seen by its owner alone until the PIN is given: the other adults of the space get a "locked documents" row with an Unlock button, and the owner opens their own with their **fingerprint, face or screen lock** instead of the PIN. An unlock lasts 15 minutes. Children lock documents too; a parent sees them only with the child's PIN.
 - **Forgotten PIN.** On the profile page, "Forgot your PIN?" asks the person to confirm it is them (the password, or the Google account again, the same as for deleting the account), then takes a new PIN. A child's PIN is reset by an adult from the members list; the activity log says who did it.
-- **Activity** in the space menu, for adults: who added, opened or deleted which document, and who gave a child a new PIN. Opening one's own documents is not logged.
+- **Activity** in the space menu, for adults: who added, opened or deleted which document, who made a link to one, and who gave a child a new PIN. Opening one's own documents is not logged.
+- **A link for someone outside the family.** "Link" on a document makes a web link to its file that works for an hour, a day or a week, for anyone who has it, without signing in: a doctor, an insurer, a school. The links still working are listed under the document, where a tap sends one again and the cross stops it early. Who made a link shows in the activity log.
+- **Keep on this phone**, in a document's menu, keeps a copy of its file for a trip: it opens, shares and prints with no connection. The list and the thumbnails are on the phone anyway.
 - **Open, share, print.** A document opens in the app the phone uses for it, goes through the share sheet to email, messaging apps, nearby phones and printers, and pictures and PDFs print straight from the app.
 - **Share into the vault.** "Share" a file, a picture or a link from any other app to Vault Anything, pick the family space, and it becomes a document.
 - **Invites** work four ways: a code anyone can type, a QR code, a link, or an invitation for one email address (shown inside the app when that person signs in with it).
@@ -19,7 +21,7 @@ A family document vault for Android. Create a family space, invite the others, a
 - **Delete account** in Settings leaves every space (a space you own goes to the next adult, an empty one is deleted) and removes the sign-in. The Play Store requires this of apps with accounts.
 - Sign-in is with Google, or with an email and password (with a new-password link and an email to confirm the address). Everything lives in the cloud, so a new phone shows the same documents after signing in. The app is in English and Greek. It follows the phone's language until another one is chosen on the **profile page**, which also has sign out.
 
-Coming next, in this order: expiring share links and offline copies; emergency access, a child turning 18 and choosing what the parents keep seeing.
+Coming next: emergency access for a trusted person, and a child turning 18 and choosing what the parents keep seeing.
 
 ## Set up Firebase (once, about fifteen minutes)
 
@@ -115,6 +117,8 @@ The Firestore document layout is described at the top of `core/data/src/main/kot
 - The PIN is checked by a Cloud Function (five wrong tries lock the PIN for 15 minutes), so unlocking needs a connection, and the functions must be deployed. An unlock is forgotten when the app is closed; the PIN or the phone's lock is asked again. Confirming it is you with the Google account on a phone that is already signed in takes one tap: the phone's own lock is what keeps a stranger out there.
 - Documents added before PINs existed show to the other adults again once their owner opens the space in the new version.
 - The activity log keeps every entry; the screen shows the newest 200.
+- A share link sends the browser on to the file's own address in Cloud Storage. That address is taken back by a Cloud Function that runs every hour, so someone who kept it, rather than the link, can open the file for up to an hour after the link ran out. Stopping a link takes its address back at once.
+- A copy kept on the phone of a document that was deleted on another phone stays there until the app's storage is cleared.
 - A file is uploaded while the "Add document" screen is open, with a progress bar. Leaving the screen does not stop the upload, but a lost connection does: the document disappears again and the screen says so, so it can be added once more.
 - Only pictures and PDFs print from the app. Other files open in the app that knows them, which usually prints too.
 - The words on a scan are read with Latin letters and numbers only: a Greek paper is found by its title, tags and note, and by any numbers on it. Reading a Greek paper would need a paid cloud service.

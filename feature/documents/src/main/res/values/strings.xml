@@ -26,6 +26,21 @@
     <string name="feature_documents_words">Words on it</string>
     <string name="feature_documents_copy_words">Copy the words</string>
     <string name="feature_documents_copied">Copied</string>
+    <string name="feature_documents_share_link">Link</string>
+    <string name="feature_documents_share_link_title">A link that works for</string>
+    <string name="feature_documents_share_link_hint">Anyone with the link opens the file, without signing in, until it runs out. You can stop it earlier from this page.</string>
+    <string name="feature_documents_one_hour">1 hour</string>
+    <string name="feature_documents_one_day">1 day</string>
+    <string name="feature_documents_one_week">1 week</string>
+    <string name="feature_documents_could_not_share">Could not make the link. Check your connection and try again.</string>
+    <string name="feature_documents_links">Links</string>
+    <string name="feature_documents_link_until">Works until %1$s</string>
+    <string name="feature_documents_stop_link">Stop this link</string>
+    <string name="feature_documents_keep">Keep on this phone</string>
+    <string name="feature_documents_unkeep">Remove from this phone</string>
+    <string name="feature_documents_kept">On this phone, also without a connection</string>
+    <string name="feature_documents_kept_done">Kept on this phone</string>
+    <string name="feature_documents_unkept_done">Removed from this phone</string>
 
     <string name="feature_documents_add_title">Add document</string>
     <string name="feature_documents_edit_title">Edit document</string>

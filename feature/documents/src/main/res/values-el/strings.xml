@@ -25,6 +25,21 @@
     <string name="feature_documents_words">Λέξεις πάνω του</string>
     <string name="feature_documents_copy_words">Αντιγραφή των λέξεων</string>
     <string name="feature_documents_copied">Αντιγράφηκε</string>
+    <string name="feature_documents_share_link">Σύνδεσμος</string>
+    <string name="feature_documents_share_link_title">Ένας σύνδεσμος που ισχύει για</string>
+    <string name="feature_documents_share_link_hint">Όποιος έχει τον σύνδεσμο ανοίγει το αρχείο, χωρίς σύνδεση σε λογαριασμό, μέχρι να λήξει. Μπορείς να τον σταματήσεις νωρίτερα από αυτή τη σελίδα.</string>
+    <string name="feature_documents_one_hour">1 ώρα</string>
+    <string name="feature_documents_one_day">1 ημέρα</string>
+    <string name="feature_documents_one_week">1 εβδομάδα</string>
+    <string name="feature_documents_could_not_share">Δεν δημιουργήθηκε ο σύνδεσμος. Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.</string>
+    <string name="feature_documents_links">Σύνδεσμοι</string>
+    <string name="feature_documents_link_until">Ισχύει μέχρι %1$s</string>
+    <string name="feature_documents_stop_link">Σταμάτημα αυτού του συνδέσμου</string>
+    <string name="feature_documents_keep">Διατήρηση σε αυτό το τηλέφωνο</string>
+    <string name="feature_documents_unkeep">Αφαίρεση από αυτό το τηλέφωνο</string>
+    <string name="feature_documents_kept">Σε αυτό το τηλέφωνο, και χωρίς σύνδεση</string>
+    <string name="feature_documents_kept_done">Διατηρήθηκε σε αυτό το τηλέφωνο</string>
+    <string name="feature_documents_unkept_done">Αφαιρέθηκε από αυτό το τηλέφωνο</string>
     <string name="feature_documents_note">Σημείωση</string>
 
     <string name="feature_documents_add_title">Προσθήκη εγγράφου</string>

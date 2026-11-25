@@ -343,6 +343,16 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['updatedAt']);
     }
 
+    // shares/{shareId}: a link to one file that anyone may open until it runs out. Made and ended by
+    // shareDocument, unshareDocument and expireShares in firebase/functions; the app lists the links
+    // of a document with a query on spaceId, documentId and ownerId, which is how the rules below
+    // can be checked for a list.
+    match /shares/{shareId} {
+      allow read: if isSpaceMember(resource.data.spaceId)
+        && (resource.data.ownerId == uid() || isAdult(space(resource.data.spaceId)));
+      allow write: if false;
+    }
+
     // invites/{code} maps an invite code to its space.
     match /invites/{code} {
       // Fetched by exact code only, so codes cannot be listed.

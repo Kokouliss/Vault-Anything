@@ -20,13 +20,15 @@ exports.cleanUpSpace = europe
     await getStorage().bucket().deleteFiles({ prefix: `spaces/${context.params.spaceId}/` });
   });
 
-// A deleted document takes its file along, also when it was deleted offline. The app never deletes
-// from Storage itself, so the Storage rules allow no deletes at all.
+// A deleted document takes its file and its share links along, also when it was deleted offline.
+// The app never deletes from Storage itself, so the Storage rules allow no deletes at all.
 exports.cleanUpDocument = europe.firestore
   .document('spaces/{spaceId}/documents/{documentId}')
-  .onDelete((snapshot, context) => {
+  .onDelete(async (snapshot, context) => {
     const { spaceId, documentId } = context.params;
-    return getStorage().bucket().deleteFiles({ prefix: `spaces/${spaceId}/documents/${documentId}/` });
+    await getStorage().bucket().deleteFiles({ prefix: `spaces/${spaceId}/documents/${documentId}/` });
+    const shares = await getFirestore().collection('shares').where('spaceId', '==', spaceId).where('documentId', '==', documentId).get();
+    await Promise.all(shares.docs.map((share) => share.ref.delete()));
   });
 
 // How many days before a document runs out the family hears about it, and once more on the day.
@@ -221,4 +223,136 @@ exports.resetPin = europe.https.onCall(async (data, context) => {
     memberName: them.name,
   });
   return { result: 'ok' };
+});
+
+// Share links. One opens the file of one document for anyone who has it, no sign-in needed, until
+// it runs out. shares/{shareId} is written here only. The file in Storage gets a download token of
+// its own for each link (the address the link redirects to), taken back when the link ends.
+const SHARE_HOURS = [1, 24, 168];
+const SHARE_ID = /^[\w-]{22}$/;
+const fileOf = (spaceId, documentId) => getStorage().bucket().file(`spaces/${spaceId}/documents/${documentId}/file`);
+const GONE_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>Vault Anything</title><style>body{font-family:sans-serif;margin:3rem auto;max-width:30rem;padding:0 1rem;line-height:1.5}</style></head>
+<body><h1>Vault Anything</h1><p>This link has run out. Ask the person who sent it for a new one.</p>
+<p lang="el">Αυτός ο σύνδεσμος έληξε. Ζήτα έναν νέο από όποιον τον έστειλε.</p></body></html>`;
+
+/** Rewrites the file's download tokens with [change], and names the file for the browser. */
+async function setTokens(file, fileName, change) {
+  const [metadata] = await file.getMetadata();
+  const tokens = change((metadata.metadata?.firebaseStorageDownloadTokens || '').split(',').filter(Boolean));
+  await file.setMetadata({
+    contentDisposition: `inline; filename*=UTF-8''${encodeURIComponent(fileName || 'file')}`,
+    metadata: { firebaseStorageDownloadTokens: tokens.length ? tokens.join(',') : null },
+  });
+}
+
+/** Ends a share: the link stops, and the file's token with it. A file already gone is fine. */
+async function endShare(share) {
+  const { spaceId, documentId, fileName, token } = share.data();
+  try {
+    await setTokens(fileOf(spaceId, documentId), fileName, (tokens) => tokens.filter((t) => t !== token));
+  } catch (e) {
+    if (e.code !== 404) throw e;
+  }
+  await share.ref.delete();
+}
+
+/** The space's members and the caller's entry, or permission-denied. */
+async function memberOf(db, spaceId, uid) {
+  const space = await db.doc(`spaces/${spaceId}`).get();
+  const members = (space.exists && space.get('members')) || {};
+  if (!members[uid]) throw new HttpsError('permission-denied', 'Not a member of this space.');
+  return { members, me: members[uid] };
+}
+
+// Makes a link to the file of {spaceId, documentId} that works for {hours} (one of SHARE_HOURS): by
+// the owner, or by an adult for a child's document (mayManage in the rules), a locked one by its
+// owner alone. The adults see it in the activity log.
+exports.shareDocument = europe.https.onCall(async (data, context) => {
+  const auth = requireAuth(context);
+  const db = getFirestore();
+  const { spaceId, documentId, hours } = data || {};
+  if (typeof spaceId !== 'string' || typeof documentId !== 'string' || !SHARE_HOURS.includes(hours)) {
+    throw new HttpsError('invalid-argument', 'spaceId, documentId and hours (1, 24 or 168) are needed.');
+  }
+  const { members, me } = await memberOf(db, spaceId, auth.uid);
+  const document = await db.doc(`spaces/${spaceId}/documents/${documentId}`).get();
+  if (!document.exists) throw new HttpsError('not-found', 'No such document.');
+  const ownerId = document.get('ownerId');
+  const mine = ownerId === auth.uid;
+  if (!mine && (me.role !== 'adult' || members[ownerId]?.role === 'adult' || document.get('locked') === true)) {
+    throw new HttpsError('permission-denied', 'Only the owner, or an adult for a child, shares a document.');
+  }
+  if (document.get('kind') === 'link' || document.get('uploaded') === false) {
+    throw new HttpsError('failed-precondition', 'Only an uploaded file is shared by link.');
+  }
+  const id = randomBytes(16).toString('base64url');
+  const token = randomBytes(16).toString('hex');
+  const fileName = document.get('fileName');
+  await setTokens(fileOf(spaceId, documentId), fileName, (tokens) => [...tokens, token]);
+  const expiresAt = Timestamp.fromMillis(Date.now() + hours * 3_600_000);
+  const url = `https://${process.env.GCLOUD_PROJECT}.web.app/s/${id}`;
+  const batch = db.batch();
+  batch.set(db.doc(`shares/${id}`), {
+    spaceId,
+    documentId,
+    ownerId,
+    createdById: auth.uid,
+    createdByName: me.name,
+    title: document.get('title'),
+    fileName,
+    token,
+    url,
+    expiresAt,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  batch.set(db.collection(`spaces/${spaceId}/activity`).doc(), {
+    at: FieldValue.serverTimestamp(),
+    actorId: auth.uid,
+    actorName: me.name,
+    action: 'shared',
+    documentId,
+    documentTitle: document.get('title'),
+  });
+  await batch.commit();
+  return { id, url, expiresAtMillis: expiresAt.toMillis() };
+});
+
+// Stops the link {shareId} before its time: whoever made it, the owner of the document, or an adult
+// looking after a child's.
+exports.unshareDocument = europe.https.onCall(async (data, context) => {
+  const auth = requireAuth(context);
+  const db = getFirestore();
+  const { shareId } = data || {};
+  if (typeof shareId !== 'string' || !SHARE_ID.test(shareId)) throw new HttpsError('invalid-argument', 'shareId is needed.');
+  const share = await db.doc(`shares/${shareId}`).get();
+  if (!share.exists) return { result: 'ok' };
+  const { spaceId, ownerId, createdById } = share.data();
+  const { members, me } = await memberOf(db, spaceId, auth.uid);
+  const mayStop = createdById === auth.uid || ownerId === auth.uid || (me.role === 'adult' && members[ownerId]?.role !== 'adult');
+  if (!mayStop) throw new HttpsError('permission-denied', 'Not your link to stop.');
+  await endShare(share);
+  return { result: 'ok' };
+});
+
+// Every hour, the links that ran out stop for good: until then the file's own address, which the link
+// redirected to, would still open for someone who kept it.
+exports.expireShares = europe.pubsub.schedule('every 1 hours').onRun(async () => {
+  const due = await getFirestore().collection('shares').where('expiresAt', '<=', Timestamp.now()).get();
+  for (const share of due.docs) await endShare(share);
+});
+
+// /s/{shareId} on the app's site (firebase.json sends it here): the file behind a share link, for
+// anyone who has the link, until it runs out.
+exports.share = europe.https.onRequest(async (req, res) => {
+  const id = req.path.split('/').filter(Boolean).pop() || '';
+  const share = SHARE_ID.test(id) ? await getFirestore().doc(`shares/${id}`).get() : null;
+  res.set('Cache-Control', 'private, no-store');
+  if (!share?.exists || share.get('expiresAt').toMillis() <= Date.now()) {
+    res.status(410).type('html').send(GONE_PAGE);
+    return;
+  }
+  const { spaceId, documentId, token } = share.data();
+  const file = fileOf(spaceId, documentId);
+  res.redirect(302, `https://firebasestorage.googleapis.com/v0/b/${file.bucket.name}/o/${encodeURIComponent(file.name)}?alt=media&token=${token}`);
 });

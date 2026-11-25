@@ -41,7 +41,8 @@ jobs:
         run: printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
 
       - name: Run the unit tests
-        run: ./gradlew testDebugUnitTest :core:domain:test
+        # --continue: one run shows every module's errors, not only the first.
+        run: ./gradlew --continue testDebugUnitTest :core:domain:test
 
       # With the real signing key (the four secrets under "Signing key" in the README) a merge to main
       # is the optimized release build, plus the bundle Google Play takes. Pull requests, and main

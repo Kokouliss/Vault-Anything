@@ -120,7 +120,8 @@ fun Document.matches(query: String): Boolean {
 }
 
 private val WEB_SCHEME = Regex("^[A-Za-z][A-Za-z0-9+.-]*://")
-private val WEB_LINK = Regex("^https?://[^\\s/?#]+\\.[^\\s/?#]+(?:[/?#]\\S*)?$")
+// The host has no ":" or "@", so "mailto:a@b.com" is not read as a web page. A port may follow it.
+private val WEB_LINK = Regex("^https?://[^\\s/?#:@]+\\.[^\\s/?#:@]+(?::\\d+)?(?:[/?#]\\S*)?$")
 
 /** The link as the app opens and stores it: "example.com/page" becomes https, anything that is not a web page is null. */
 fun normalizeLink(input: String): String? {

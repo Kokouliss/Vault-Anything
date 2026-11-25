@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="feature_documents_document_gone">Το έγγραφο διαγράφηκε.</string>
+    <string name="feature_documents_favorite">Σημείωση ως αγαπημένο</string>
+    <string name="feature_documents_unfavorite">Αφαίρεση από τα αγαπημένα</string>
+    <string name="feature_documents_edit">Επεξεργασία</string>
+    <string name="feature_documents_delete_confirm_title">Να διαγραφεί αυτό το έγγραφο;</string>
+    <string name="feature_documents_delete_confirm_text">Αφαιρείται για όλους στον χώρο, μαζί με το αρχείο του. Δεν μπορεί να αναιρεθεί.</string>
+    <string name="feature_documents_open">Άνοιγμα</string>
+    <string name="feature_documents_share">Κοινοποίηση</string>
+    <string name="feature_documents_print">Εκτύπωση</string>
+    <string name="feature_documents_no_app">Καμία εφαρμογή σε αυτό το κινητό δεν μπορεί να το ανοίξει.</string>
+    <string name="feature_documents_could_not_fetch">Δεν ήταν δυνατή η λήψη του αρχείου. Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.</string>
+    <string name="feature_documents_still_uploading">Ανεβαίνει ακόμα. Δοκίμασε ξανά σε λίγο.</string>
+    <string name="feature_documents_fetching">Λήψη του αρχείου</string>
+    <string name="feature_documents_belongs_to">Έγγραφο: %1$s</string>
+    <string name="feature_documents_added_by">Το πρόσθεσε: %1$s</string>
+    <string name="feature_documents_expires_on">Ισχύει έως %1$s</string>
+    <string name="feature_documents_note">Σημείωση</string>
+
+    <string name="feature_documents_add_title">Προσθήκη εγγράφου</string>
+    <string name="feature_documents_edit_title">Επεξεργασία εγγράφου</string>
+    <string name="feature_documents_attachment_needed">Πρόσθεσε μια φωτογραφία, ένα αρχείο ή έναν σύνδεσμο.</string>
+    <string name="feature_documents_take_photo">Φωτογραφία</string>
+    <string name="feature_documents_choose_file">Επιλογή αρχείου</string>
+    <string name="feature_documents_paste_link">Επικόλληση συνδέσμου</string>
+    <string name="feature_documents_change">Αλλαγή</string>
+    <string name="feature_documents_link_label">Διεύθυνση ιστού</string>
+    <string name="feature_documents_link_invalid">Γράψε μια πλήρη διεύθυνση ιστού, για παράδειγμα https://gov.gr</string>
+    <string name="feature_documents_title_label">Τίτλος</string>
+    <string name="feature_documents_owner_label">Ποιανού είναι το έγγραφο;</string>
+    <string name="feature_documents_category_label">Κατηγορία</string>
+    <string name="feature_documents_tags_label">Ετικέτες</string>
+    <string name="feature_documents_tags_hint">Χώρισέ τες με κόμματα, για παράδειγμα διαβατήριο, ταξίδι</string>
+    <string name="feature_documents_expiry_none">Χωρίς ημερομηνία λήξης</string>
+    <string name="feature_documents_clear_expiry">Αφαίρεση της ημερομηνίας</string>
+    <string name="feature_documents_note_label">Σημείωση</string>
+    <string name="feature_documents_favorite_label">Αγαπημένο</string>
+    <string name="feature_documents_uploading">Αποθήκευση</string>
+    <string name="feature_documents_too_large">Το αρχείο είναι μεγαλύτερο από 25 MB. Διάλεξε ένα μικρότερο.</string>
+    <string name="feature_documents_unreadable">Το αρχείο δεν μπόρεσε να διαβαστεί. Διάλεξέ το ξανά.</string>
+    <string name="feature_documents_failed">Δεν ήταν δυνατή η αποθήκευση. Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.</string>
+
+    <string name="feature_documents_share_title">Σε ποιον οικογενειακό χώρο;</string>
+    <string name="feature_documents_share_none_title">Δεν υπάρχει χώρος ακόμα</string>
+    <string name="feature_documents_share_none_body">Φτιάξε πρώτα έναν οικογενειακό χώρο και μετά κοινοποίησε το αρχείο ξανά.</string>
+    <plurals name="feature_documents_member_count">
+        <item quantity="one">%d μέλος</item>
+        <item quantity="other">%d μέλη</item>
+    </plurals>
+</resources>

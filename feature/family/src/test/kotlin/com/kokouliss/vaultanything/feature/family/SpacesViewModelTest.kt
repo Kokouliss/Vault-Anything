@@ -1,0 +1,153 @@
+package com.kokouliss.vaultanything.feature.family
+
+import app.cash.turbine.test
+import com.google.common.truth.Truth.assertThat
+import com.kokouliss.vaultanything.core.domain.model.JoinResult
+import com.kokouliss.vaultanything.core.domain.model.Member
+import com.kokouliss.vaultanything.core.domain.model.Role
+import com.kokouliss.vaultanything.core.domain.model.Space
+import com.kokouliss.vaultanything.core.domain.model.User
+import com.kokouliss.vaultanything.core.domain.repository.AuthRepository
+import com.kokouliss.vaultanything.core.domain.repository.EmailAuthResult
+import com.kokouliss.vaultanything.core.domain.repository.SpaceRepository
+import java.io.IOException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
+import org.junit.Before
+import org.junit.Test
+
+class SpacesViewModelTest {
+
+    private val family = Space("s1", "Family", "u1", "ABCD2345", listOf(Member("u1", "Panos")), emptyList())
+    private val flatmates = family.copy(id = "s2", name = "Flatmates")
+    private val spaces = FakeSpaceRepository()
+    private val auth = FakeAuthRepository()
+
+    @Before
+    fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
+
+    @After
+    fun tearDown() = Dispatchers.resetMain()
+
+    @Test
+    fun `shows the user's spaces and invitations`() = runTest {
+        spaces.spaces.value = listOf(family)
+        spaces.invitations.value = listOf(flatmates)
+
+        SpacesViewModel(spaces, auth).uiState.test {
+            assertThat(expectMostRecentItem()).isEqualTo(
+                SpacesUiState.Ready(
+                    userName = "Panos",
+                    spaces = listOf(family),
+                    invitations = listOf(flatmates),
+                    join = JoinState.Idle,
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `a join result stays until the screen has shown it`() = runTest {
+        spaces.joinResult = JoinResult.InvalidCode
+        val viewModel = SpacesViewModel(spaces, auth)
+
+        viewModel.uiState.test {
+            viewModel.joinWithCode("WRONG")
+            assertThat((expectMostRecentItem() as SpacesUiState.Ready).join)
+                .isEqualTo(JoinState.Done(JoinResult.InvalidCode))
+
+            viewModel.joinShown()
+            assertThat((expectMostRecentItem() as SpacesUiState.Ready).join).isEqualTo(JoinState.Idle)
+        }
+    }
+
+    @Test
+    fun `a declined invitation goes at once and is written after keep`() = runTest {
+        spaces.invitations.value = listOf(flatmates)
+        val viewModel = SpacesViewModel(spaces, auth)
+
+        viewModel.uiState.test {
+            expectMostRecentItem()
+            viewModel.declineInvitation("s2")
+            assertThat((expectMostRecentItem() as SpacesUiState.Ready).invitations).isEmpty()
+            assertThat(spaces.declined).isEmpty()
+
+            viewModel.declines.keep(viewModel.declines.pending.value!!.token)
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        assertThat(spaces.declined).containsExactly("s2")
+    }
+
+    @Test
+    fun `a failing stream shows the error state and retry recovers`() = runTest {
+        spaces.failSpaces = true
+        val viewModel = SpacesViewModel(spaces, auth)
+
+        viewModel.uiState.test {
+            assertThat(expectMostRecentItem()).isEqualTo(SpacesUiState.Error)
+
+            spaces.failSpaces = false
+            viewModel.retry()
+
+            assertThat(expectMostRecentItem()).isInstanceOf(SpacesUiState.Ready::class.java)
+        }
+    }
+}
+
+private class FakeAuthRepository : AuthRepository {
+    override val currentUser: Flow<User?> = flowOf(User("u1", "Panos", "panos@example.com"))
+    override suspend fun signInWithGoogle(idToken: String) = true
+    override suspend fun registerDevice() = Unit
+    override suspend fun signOut() = Unit
+    override suspend fun deleteAccount(idToken: String) = true
+    override suspend fun signInWithEmail(email: String, password: String) = EmailAuthResult.Success
+    override suspend fun createAccount(name: String, email: String, password: String) = EmailAuthResult.Success
+    override suspend fun sendPasswordReset(email: String) = EmailAuthResult.Success
+    override suspend fun sendVerificationEmail() = true
+    override suspend fun refreshEmailVerification() = Unit
+    override suspend fun deleteAccountWithPassword(password: String) = true
+    override val asksForName: Flow<Boolean> = flowOf(false)
+    override suspend fun setName(name: String) = true
+    override fun keepName() = Unit
+}
+
+private class FakeSpaceRepository : SpaceRepository {
+    val spaces = MutableStateFlow(emptyList<Space>())
+    val invitations = MutableStateFlow(emptyList<Space>())
+    var failSpaces = false
+    var joinResult = JoinResult.Joined
+    val declined = mutableListOf<String>()
+
+    override fun observeSpaces(): Flow<List<Space>> = flow {
+        if (failSpaces) throw IOException("permission denied")
+        emitAll(spaces)
+    }
+
+    override fun observeInvitations(): Flow<List<Space>> = invitations
+    override fun observeSpace(spaceId: String): Flow<Space?> = flowOf(null)
+    override suspend fun joinWithCode(code: String) = joinResult
+
+    override suspend fun createSpace(name: String) = Unit
+    override suspend fun renameSpace(spaceId: String, name: String) = Unit
+    override suspend fun acceptInvitation(spaceId: String) = Unit
+    override suspend fun declineInvitation(spaceId: String) {
+        declined += spaceId
+    }
+    override suspend fun inviteEmail(spaceId: String, email: String) = Unit
+    override suspend fun cancelEmailInvite(spaceId: String, email: String) = Unit
+    override suspend fun removeMember(space: Space, memberId: String) = Unit
+    override suspend fun resetInviteCode(space: Space) = Unit
+    override suspend fun setRole(spaceId: String, memberId: String, role: Role) = Unit
+    override suspend fun leaveSpace(spaceId: String) = Unit
+    override suspend fun deleteSpace(space: Space) = Unit
+}

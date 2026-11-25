@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="core_ui_back">Back</string>
+    <string name="core_ui_cancel">Cancel</string>
+    <string name="core_ui_save">Save</string>
+    <string name="core_ui_delete">Delete</string>
+    <string name="core_ui_more_options">More options</string>
+    <string name="core_ui_loading">Loading</string>
+    <string name="core_ui_undo">Undo</string>
+    <string name="core_ui_at_limit">Character limit: %1$d</string>
+    <string name="core_ui_error_generic">Something went wrong. Check your connection and try again.</string>
+
+    <!-- The categories a document is kept under. -->
+    <string name="core_ui_category_identity">Identity</string>
+    <string name="core_ui_category_health">Health</string>
+    <string name="core_ui_category_home">Home</string>
+    <string name="core_ui_category_car">Car</string>
+    <string name="core_ui_category_school">School</string>
+    <string name="core_ui_category_finance">Finance</string>
+    <string name="core_ui_category_other">Other</string>
+    <plurals name="core_ui_expires_in">
+        <item quantity="one">Expires tomorrow</item>
+        <item quantity="other">Expires in %d days</item>
+    </plurals>
+    <string name="core_ui_expires_today">Expires today</string>
+    <plurals name="core_ui_expired_ago">
+        <item quantity="one">Expired yesterday</item>
+        <item quantity="other">Expired %d days ago</item>
+    </plurals>
+</resources>

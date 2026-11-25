@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The app logo without its dark tile: a shield with three documents safe inside it, in the three
+     colours of the AnyKind logos. In a 100 by 100 box, like the List Anything logo, so the launcher icon
+     and the sign-in screen can put the tile behind it. AppLoader draws the three parts one by one, so
+     the circles come first and the shield last. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="100dp"
+    android:height="100dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+    <group
+        android:scaleX="0.9"
+        android:scaleY="0.9"
+        android:translateX="5"
+        android:translateY="5">
+        <path
+            android:fillColor="#B4472E"
+            android:pathData="M50,34m-8,0a8,8 0,1 0,16 0a8,8 0,1 0,-16 0" />
+        <path
+            android:fillColor="#B58428"
+            android:pathData="M50,52m-8,0a8,8 0,1 0,16 0a8,8 0,1 0,-16 0" />
+        <path
+            android:fillColor="#2F7F92"
+            android:pathData="M50,70m-8,0a8,8 0,1 0,16 0a8,8 0,1 0,-16 0" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillType="evenOdd"
+            android:pathData="M50,6L88,20V52C88,74 71,89 50,96C29,89 12,74 12,52V20ZM50,15L20,26V52C20,69 33,81 50,87C67,81 80,69 80,52V26Z" />
+    </group>
+</vector>

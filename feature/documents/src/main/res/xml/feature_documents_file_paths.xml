@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- camera: where the camera app writes a new photo. documents: where FirestoreDocumentRepository keeps downloaded files. -->
+<paths>
+    <cache-path name="camera" path="camera/" />
+    <cache-path name="documents" path="documents/" />
+</paths>

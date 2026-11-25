@@ -6,20 +6,15 @@ import com.kokouliss.vaultanything.core.domain.model.Document
 import com.kokouliss.vaultanything.core.domain.model.DocumentCategory
 import com.kokouliss.vaultanything.core.domain.model.DocumentDetails
 import com.kokouliss.vaultanything.core.domain.model.DocumentKind
-import com.kokouliss.vaultanything.core.domain.model.JoinResult
 import com.kokouliss.vaultanything.core.domain.model.Member
 import com.kokouliss.vaultanything.core.domain.model.Role
 import com.kokouliss.vaultanything.core.domain.model.Space
 import com.kokouliss.vaultanything.core.domain.model.User
 import com.kokouliss.vaultanything.core.domain.repository.AddResult
-import com.kokouliss.vaultanything.core.domain.repository.AuthRepository
 import com.kokouliss.vaultanything.core.domain.repository.DocumentRepository
-import com.kokouliss.vaultanything.core.domain.repository.EmailAuthResult
-import com.kokouliss.vaultanything.core.domain.repository.SpaceRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -102,46 +97,10 @@ class SpaceDetailViewModelTest {
         val viewModel = viewModel(User("u1", "Panos", null))
         viewModel.uiState.test {
             viewModel.showMember("u3")
-            spaces.space.value = family.copy(members = listOf(Member("u1", "Panos", Role.ADULT)))
+            spaces.spaces.value = listOf(family.copy(members = listOf(Member("u1", "Panos", Role.ADULT))))
             assertThat((expectMostRecentItem() as SpaceDetailUiState.Ready).filter.memberId).isNull()
         }
     }
-}
-
-private class FakeAuthRepository(user: User) : AuthRepository {
-    override val currentUser: Flow<User?> = flowOf(user)
-    override suspend fun signInWithGoogle(idToken: String) = true
-    override suspend fun registerDevice() = Unit
-    override suspend fun signOut() = Unit
-    override suspend fun deleteAccount(idToken: String) = true
-    override suspend fun signInWithEmail(email: String, password: String) = EmailAuthResult.Success
-    override suspend fun createAccount(name: String, email: String, password: String) = EmailAuthResult.Success
-    override suspend fun sendPasswordReset(email: String) = EmailAuthResult.Success
-    override suspend fun sendVerificationEmail() = true
-    override suspend fun refreshEmailVerification() = Unit
-    override suspend fun deleteAccountWithPassword(password: String) = true
-    override val asksForName: Flow<Boolean> = flowOf(false)
-    override suspend fun setName(name: String) = true
-    override fun keepName() = Unit
-}
-
-private class FakeSpaceRepository(space: Space) : SpaceRepository {
-    val space = MutableStateFlow<Space?>(space)
-    override fun observeSpaces(): Flow<List<Space>> = space.map { listOfNotNull(it) }
-    override fun observeInvitations(): Flow<List<Space>> = flowOf(emptyList())
-    override fun observeSpace(spaceId: String): Flow<Space?> = space
-    override suspend fun joinWithCode(code: String) = JoinResult.Joined
-    override suspend fun createSpace(name: String) = Unit
-    override suspend fun renameSpace(spaceId: String, name: String) = Unit
-    override suspend fun acceptInvitation(spaceId: String) = Unit
-    override suspend fun declineInvitation(spaceId: String) = Unit
-    override suspend fun inviteEmail(spaceId: String, email: String) = Unit
-    override suspend fun cancelEmailInvite(spaceId: String, email: String) = Unit
-    override suspend fun setRole(spaceId: String, memberId: String, role: Role) = Unit
-    override suspend fun removeMember(space: Space, memberId: String) = Unit
-    override suspend fun resetInviteCode(space: Space) = Unit
-    override suspend fun leaveSpace(spaceId: String) = Unit
-    override suspend fun deleteSpace(space: Space) = Unit
 }
 
 private class FakeDocumentRepository(all: List<Document>) : DocumentRepository {

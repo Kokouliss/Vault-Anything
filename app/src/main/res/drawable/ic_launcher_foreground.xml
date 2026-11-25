@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The app logo. A launcher shows the middle 72dp of the 108dp canvas, so 18dp of inset on every side
+     puts the 100-unit tile of the logo exactly there. Its shapes stay inside the 66dp safe zone. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/core_ui_logo_vault"
+    android:inset="16.6667%" />

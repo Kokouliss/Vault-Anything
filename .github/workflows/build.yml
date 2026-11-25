@@ -1,0 +1,151 @@
+name: Build
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # "Run workflow" on the Actions tab makes a new build of main by hand.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  # A newer push replaces a pull request's build, but every merge to main gets its own release.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  VERSION: 0.1.${{ github.run_number }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The Firebase config is not in the repository (it is public). Sign-in only works in builds
+      # that have it, so it comes from a repository secret when one is set.
+      - name: Write the Firebase config
+        if: env.GOOGLE_SERVICES_JSON != ''
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+
+      - name: Run the unit tests
+        # --continue: one run shows every module's errors, not only the first.
+        run: ./gradlew --continue testDebugUnitTest :core:domain:test
+
+      # With the real signing key (the four secrets under "Signing key" in the README) a merge to main
+      # is the optimized release build, plus the bundle Google Play takes. Pull requests, and main
+      # without the key, build the debug app signed with the shared debug key.
+      - name: Build the app
+        env:
+          KEYSTORE_BASE64: ${{ github.event_name == 'push' && secrets.RELEASE_KEYSTORE_BASE64 || '' }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          mkdir -p out
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > app/release.keystore
+            ./gradlew :app:assembleRelease :app:bundleRelease
+            cp app/build/outputs/apk/release/app-release.apk out/vault-anything.apk
+            cp app/build/outputs/bundle/release/app-release.aab out/vault-anything.aab
+          else
+            ./gradlew :app:assembleDebug
+            cp app/build/outputs/apk/debug/app-debug.apk out/vault-anything.apk
+          fi
+
+      - name: Upload the installable app
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vault-anything-app
+          path: out/*
+          if-no-files-found: ignore
+
+  # The security rules decide who sees whose documents, so they are tested on every change too.
+  rules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: firebase/package-lock.json
+      - name: Test the Firestore and Storage rules
+        working-directory: firebase
+        run: |
+          npm ci
+          npm test
+
+  # Publishes the app as a GitHub release, so it can be downloaded straight onto a phone: a
+  # pre-release "pr-<number>" for each open pull request (replaced on every push), and a numbered
+  # release for each merge to main. A separate job, so the build never holds a token that can write.
+  release:
+    needs: [build, rules]
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: vault-anything-app
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          keeps="Download the APK below and open it on the phone. It installs over the version you have; your documents stay in the cloud."
+          if [ -n "$PR_NUMBER" ]; then
+            tag="pr-$PR_NUMBER"
+            target="$PR_HEAD"
+            title="PR #$PR_NUMBER: $PR_TITLE (build $VERSION)"
+            notes="Test build of pull request #$PR_NUMBER, replaced every time the pull request changes. $keeps"
+            apk="vault-anything-pr-$PR_NUMBER-$VERSION.apk"
+            kind=--prerelease
+          else
+            # The pull request this merge came from names the release, and its test build is retired.
+            merged=$(gh api "repos/$GH_REPO/commits/$GITHUB_SHA/pulls" --jq '.[0] // empty | "\(.number) \(.title)"' || true)
+            tag="v$VERSION"
+            target="$GITHUB_SHA"
+            title="$tag"
+            notes="$keeps"
+            if [ -n "$merged" ]; then
+              title="$tag: ${merged#* } (#${merged%% *})"
+              notes="Built from pull request #${merged%% *}. $keeps"
+              gh release delete "pr-${merged%% *}" --cleanup-tag --yes 2>/dev/null || true
+            fi
+            apk="vault-anything-$VERSION.apk"
+            kind=--latest
+          fi
+          mv vault-anything.apk "$apk"
+          files="$apk"
+          # The bundle exists only for a main build with the signing key.
+          [ -f vault-anything.aab ] && files="$files vault-anything.aab"
+          # Deleting first makes a re-run, or a new push to the pull request, replace the release.
+          gh release delete "$tag" --cleanup-tag --yes 2>/dev/null || true
+          gh release create "$tag" $files --target "$target" --title "$title" --notes "$notes" "$kind"

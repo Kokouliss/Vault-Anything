@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="feature_documents_document_gone">The document was deleted.</string>
+    <string name="feature_documents_favorite">Mark as favorite</string>
+    <string name="feature_documents_unfavorite">Remove from favorites</string>
+    <string name="feature_documents_edit">Edit</string>
+    <string name="feature_documents_delete_confirm_title">Delete this document?</string>
+    <string name="feature_documents_delete_confirm_text">It is removed for everyone in the space, together with its file. It cannot be undone.</string>
+    <string name="feature_documents_open">Open</string>
+    <string name="feature_documents_share">Share</string>
+    <string name="feature_documents_print">Print</string>
+    <string name="feature_documents_no_app">No app on this phone can open this.</string>
+    <string name="feature_documents_could_not_fetch">Could not get the file. Check your connection and try again.</string>
+    <string name="feature_documents_still_uploading">Still uploading. Try again in a moment.</string>
+    <string name="feature_documents_fetching">Getting the file</string>
+    <string name="feature_documents_belongs_to">%1$s\'s document</string>
+    <string name="feature_documents_added_by">Added by %1$s</string>
+    <string name="feature_documents_expires_on">Valid until %1$s</string>
+    <string name="feature_documents_note">Note</string>
+
+    <string name="feature_documents_add_title">Add document</string>
+    <string name="feature_documents_edit_title">Edit document</string>
+    <string name="feature_documents_attachment_needed">Add a photo, a file or a link.</string>
+    <string name="feature_documents_take_photo">Take photo</string>
+    <string name="feature_documents_choose_file">Choose file</string>
+    <string name="feature_documents_paste_link">Paste link</string>
+    <string name="feature_documents_change">Change</string>
+    <string name="feature_documents_link_label">Web address</string>
+    <string name="feature_documents_link_invalid">Enter a full web address, for example https://gov.gr</string>
+    <string name="feature_documents_title_label">Title</string>
+    <string name="feature_documents_owner_label">Whose document is it?</string>
+    <string name="feature_documents_category_label">Category</string>
+    <string name="feature_documents_tags_label">Tags</string>
+    <string name="feature_documents_tags_hint">Separate with commas, for example passport, travel</string>
+    <string name="feature_documents_expiry_none">No expiry date</string>
+    <string name="feature_documents_clear_expiry">Remove the date</string>
+    <string name="feature_documents_note_label">Note</string>
+    <string name="feature_documents_favorite_label">Favorite</string>
+    <string name="feature_documents_uploading">Saving</string>
+    <string name="feature_documents_too_large">The file is bigger than 25 MB. Choose a smaller one.</string>
+    <string name="feature_documents_unreadable">The file could not be read. Choose it again.</string>
+    <string name="feature_documents_failed">Could not save. Check your connection and try again.</string>
+
+    <string name="feature_documents_share_title">Which family space?</string>
+    <string name="feature_documents_share_none_title">No space yet</string>
+    <string name="feature_documents_share_none_body">Create a family space first, then share the file again.</string>
+    <plurals name="feature_documents_member_count">
+        <item quantity="one">%d member</item>
+        <item quantity="other">%d members</item>
+    </plurals>
+</resources>

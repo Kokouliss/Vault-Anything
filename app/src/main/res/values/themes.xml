@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Only the window behind Compose. Colors and type come from VaultAnythingTheme. An AppCompat
+         theme, because MainActivity is an AppCompatActivity. DayNight makes the window dark in dark
+         mode, so a dark-mode start does not flash white before the first frame. -->
+    <style name="Theme.VaultAnything" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <!-- The paper of the app, so the start screen and the first frame have the same colour. -->
+        <item name="android:windowBackground">@color/paper</item>
+    </style>
+    <!-- The same value as `background` in core/ui Color.kt. The dark one is in values-night. -->
+    <color name="paper">#F7F0DD</color>
+    <!-- The dark tile of the app logo, the ink of the AnyKind logos. -->
+    <color name="ic_launcher_background">#171A21</color>
+</resources>

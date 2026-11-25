@@ -1,0 +1,14 @@
+{
+  "name": "vault-anything-rules",
+  "private": true,
+  "type": "module",
+  "description": "Tests firestore.rules and storage.rules on the local emulators. Needs Node 20+ and Java 21+.",
+  "scripts": {
+    "test": "firebase emulators:exec --only firestore,storage --project demo-vault-anything \"node --test --test-concurrency=1 test/rules.test.mjs test/storage.test.mjs\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^6.0.0",
+    "firebase": "^13.2.0",
+    "firebase-tools": "^15.35.0"
+  }
+}

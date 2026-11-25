@@ -1,0 +1,48 @@
+rules_version = '2';
+
+// Who may upload and download the file of a document. The file of spaces/{spaceId}/documents/{documentId}
+// in Firestore lives at the same path here, under the name "file". The Firestore record is written
+// first, so these rules look it up: a file without a record, or for a document someone may not
+// manage, is refused. Nobody deletes here: firebase/functions removes files with their records.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /spaces/{spaceId}/documents/{documentId}/file {
+      function space() {
+        return firestore.get(/databases/(default)/documents/spaces/$(spaceId)).data;
+      }
+
+      function record() {
+        return firestore.get(/databases/(default)/documents/spaces/$(spaceId)/documents/$(documentId)).data;
+      }
+
+      function uid() {
+        return request.auth.uid;
+      }
+
+      function isMember() {
+        return request.auth != null && uid() in space().memberIds;
+      }
+
+      // A missing role counts as child, like in the app.
+      function roleOf(memberId) {
+        return space().members.get(memberId, {}).get('role', 'child');
+      }
+
+      // Their own, or a child's seen by an adult. Adults see each other's documents but do not touch them.
+      function mayManage(ownerId) {
+        return ownerId == uid() || (roleOf(uid()) == 'adult' && roleOf(ownerId) != 'adult');
+      }
+
+      allow read: if isMember() && (record().ownerId == uid() || roleOf(uid()) == 'adult');
+
+      // Written once, under 25 MB (MAX_FILE_BYTES in the app), for a record the caller may manage.
+      // "resource == null" says the file is new: the emulator checks an overwrite as a create too.
+      allow create: if isMember()
+        && resource == null
+        && request.resource.size <= 25 * 1024 * 1024
+        && mayManage(record().ownerId);
+
+      allow update, delete: if false;
+    }
+  }
+}

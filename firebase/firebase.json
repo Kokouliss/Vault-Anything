@@ -46,6 +46,13 @@
       {
         "source": "/join/**",
         "destination": "/index.html"
+      },
+      {
+        "source": "/s/**",
+        "function": {
+          "functionId": "share",
+          "region": "europe-west1"
+        }
       }
     ]
   }

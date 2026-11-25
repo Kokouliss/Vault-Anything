@@ -18,6 +18,7 @@ import android.text.format.Formatter
 import android.widget.Toast
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +33,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -39,10 +41,13 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -55,6 +60,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
@@ -62,6 +68,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
@@ -77,6 +84,8 @@ import com.kokouliss.vaultanything.core.domain.model.Document
 import com.kokouliss.vaultanything.core.domain.model.DocumentCategory
 import com.kokouliss.vaultanything.core.domain.model.DocumentDetails
 import com.kokouliss.vaultanything.core.domain.model.DocumentKind
+import com.kokouliss.vaultanything.core.domain.model.SHARE_HOURS
+import com.kokouliss.vaultanything.core.domain.model.Share
 import com.kokouliss.vaultanything.core.domain.repository.PinResult
 import com.kokouliss.vaultanything.core.ui.R as CoreR
 import com.kokouliss.vaultanything.core.ui.component.AppIcon
@@ -101,7 +110,9 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import kotlinx.coroutines.launch
@@ -117,10 +128,13 @@ internal fun DocumentDetailRoute(
     onGone: (message: String) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val shares by viewModel.shares.collectAsStateWithLifecycle()
+    val isKept by viewModel.kept.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     var fetching by remember { mutableStateOf(false) }
+    var askLink by rememberSaveable { mutableStateOf(false) }
     var askPin by rememberSaveable { mutableStateOf(false) }
     var pinResult by remember { mutableStateOf<PinResult?>(null) }
     var checkingPin by remember { mutableStateOf(false) }
@@ -151,9 +165,14 @@ internal fun DocumentDetailRoute(
         }
     }
 
+    // The link goes out through the share sheet as text, like the address of a link document.
+    val sendLink = { document: Document, share: Share -> context.act(FileAction.Share, Uri.parse(share.url), "text/plain", document.title, toast) }
+
     DocumentDetailScreen(
         uiState = uiState,
         fetching = fetching,
+        shares = shares,
+        isKept = isKept,
         onBack = onBack,
         onEdit = onEdit,
         onSetFavorite = viewModel::setFavorite,
@@ -178,7 +197,38 @@ internal fun DocumentDetailRoute(
         onOpen = { withFile(it, FileAction.Open) },
         onShare = { withFile(it, FileAction.Share) },
         onPrint = { withFile(it, FileAction.Print) },
+        onShareLink = { askLink = true },
+        onSendLink = sendLink,
+        onStopLink = { viewModel.unshare(it.id) },
+        onSetKept = { kept ->
+            if (!fetching) {
+                scope.launch {
+                    fetching = true
+                    val done = viewModel.setKept(kept)
+                    fetching = false
+                    toast(if (!done) R.string.feature_documents_could_not_fetch else if (kept) R.string.feature_documents_kept_done else R.string.feature_documents_unkept_done)
+                }
+            }
+        },
     )
+
+    if (askLink) {
+        val document = (uiState as? DocumentDetailUiState.Ready)?.document
+        LinkDialog(
+            onPick = { hours ->
+                askLink = false
+                if (document != null && !fetching) {
+                    scope.launch {
+                        fetching = true
+                        val share = viewModel.share(hours)
+                        fetching = false
+                        if (share == null) toast(R.string.feature_documents_could_not_share) else sendLink(document, share)
+                    }
+                }
+            },
+            onDismiss = { askLink = false },
+        )
+    }
 
     if (askPin) {
         PinDialog(
@@ -269,6 +319,8 @@ private class PdfPrintAdapter(private val title: String, private val file: File)
 internal fun DocumentDetailScreen(
     uiState: DocumentDetailUiState,
     fetching: Boolean,
+    shares: List<Share>,
+    isKept: Boolean,
     onBack: () -> Unit,
     onEdit: () -> Unit,
     onSetFavorite: (Boolean) -> Unit,
@@ -278,6 +330,10 @@ internal fun DocumentDetailScreen(
     onOpen: (Document) -> Unit,
     onShare: (Document) -> Unit,
     onPrint: (Document) -> Unit,
+    onShareLink: () -> Unit,
+    onSendLink: (Document, Share) -> Unit,
+    onStopLink: (Share) -> Unit,
+    onSetKept: (Boolean) -> Unit,
 ) {
     val ready = uiState as? DocumentDetailUiState.Ready
     val document = ready?.document
@@ -291,19 +347,23 @@ internal fun DocumentDetailScreen(
                 title = { Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = { BackButton(onBack) },
                 actions = {
-                    if (document != null && ready.canEdit && !ready.isSealed) {
-                        IconButton(onClick = { onSetFavorite(!document.isFavorite) }) {
-                            AppIcon(
-                                if (document.isFavorite) AppIcons.Star else AppIcons.StarOutline,
-                                stringResource(if (document.isFavorite) R.string.feature_documents_unfavorite else R.string.feature_documents_favorite),
-                                tint = if (document.isFavorite) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface,
-                            )
+                    if (document != null && !ready.isSealed) {
+                        if (ready.canEdit) {
+                            IconButton(onClick = { onSetFavorite(!document.isFavorite) }) {
+                                AppIcon(
+                                    if (document.isFavorite) AppIcons.Star else AppIcons.StarOutline,
+                                    stringResource(if (document.isFavorite) R.string.feature_documents_unfavorite else R.string.feature_documents_favorite),
+                                    tint = if (document.isFavorite) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
                         }
                         DocumentMenu(
-                            onEdit = onEdit,
+                            onEdit = onEdit.takeIf { ready.canEdit },
                             onDelete = { confirmDelete = true },
                             onSetLocked = if (ready.canLock) onSetLocked else null,
                             isLocked = document.isLocked,
+                            onSetKept = if (document.hasFile) onSetKept else null,
+                            isKept = isKept,
                         )
                     }
                 },
@@ -363,8 +423,16 @@ internal fun DocumentDetailScreen(
                                 Text(stringResource(R.string.feature_documents_print))
                             }
                         }
+                        // A link for someone outside the family: shareDocument in firebase/functions allows the same people.
+                        if (document.hasFile && ready.canEdit && (!document.isLocked || ready.isOwner)) {
+                            OutlinedButton(onClick = onShareLink, enabled = !fetching) {
+                                AppIcon(AppIcons.Link, null, Modifier.padding(end = 8.dp))
+                                Text(stringResource(R.string.feature_documents_share_link))
+                            }
+                        }
                     }
-                    Details(ready)
+                    Details(ready, isKept)
+                    if (shares.isNotEmpty()) Links(shares, onSend = { onSendLink(document, it) }, onStop = onStopLink)
                 }
             }
         }
@@ -404,9 +472,12 @@ private fun Preview(document: Document) {
     }
 }
 
+/** An uploaded file or picture: what a link can point at, and what can be kept on the phone. */
+private val Document.hasFile: Boolean get() = kind != DocumentKind.LINK && isUploaded
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Details(state: DocumentDetailUiState.Ready) {
+private fun Details(state: DocumentDetailUiState.Ready, isKept: Boolean) {
     val document = state.document
     val context = LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -437,8 +508,70 @@ private fun Details(state: DocumentDetailUiState.Ready) {
             Text(note, style = MaterialTheme.typography.bodyLarge)
         }
         Line(stringResource(R.string.feature_documents_added_by, document.addedByName))
+        if (isKept) Line(stringResource(R.string.feature_documents_kept))
         document.text?.takeIf { it.isNotBlank() }?.let { Words(it) }
     }
+}
+
+/** The share links that still work. A tap sends one again; the cross stops it. */
+@Composable
+private fun Links(shares: List<Share>, onSend: (Share) -> Unit, onStop: (Share) -> Unit) {
+    val format = remember { DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT) }
+    Column {
+        Text(
+            stringResource(R.string.feature_documents_links),
+            Modifier.padding(top = 8.dp).semantics { heading() },
+            style = MaterialTheme.typography.titleMedium,
+        )
+        shares.forEach { share ->
+            val until = Instant.ofEpochMilli(share.expiresAtMillis).atZone(ZoneId.systemDefault()).format(format)
+            ListItem(
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                leadingContent = { AppIcon(AppIcons.Link, null) },
+                headlineContent = { Text(stringResource(R.string.feature_documents_link_until, until)) },
+                supportingContent = { Text(share.createdByName) },
+                trailingContent = {
+                    IconButton(onClick = { onStop(share) }) {
+                        AppIcon(AppIcons.Close, stringResource(R.string.feature_documents_stop_link))
+                    }
+                },
+                modifier = Modifier.clickable(role = Role.Button) { onSend(share) },
+            )
+        }
+    }
+}
+
+/** How long the new link should work. */
+@Composable
+private fun LinkDialog(onPick: (hours: Int) -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.feature_documents_share_link_title)) },
+        text = {
+            Column {
+                SHARE_HOURS.forEach { hours ->
+                    ListItem(
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        headlineContent = {
+                            Text(
+                                stringResource(
+                                    when (hours) {
+                                        1 -> R.string.feature_documents_one_hour
+                                        24 -> R.string.feature_documents_one_day
+                                        else -> R.string.feature_documents_one_week
+                                    },
+                                ),
+                            )
+                        },
+                        modifier = Modifier.clickable(role = Role.Button) { onPick(hours) },
+                    )
+                }
+                Text(stringResource(R.string.feature_documents_share_link_hint), style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(CoreR.string.core_ui_cancel)) } },
+    )
 }
 
 /** The words read off the paper, to copy a number or a name off it without typing. */
@@ -478,15 +611,37 @@ private fun Line(text: String, emphasis: Boolean = false) {
     )
 }
 
-/** [onSetLocked] is null for someone who may not lock this document: not its owner, or without a PIN. */
+/**
+ * [onEdit] is null for someone who only looks at this document, which also hides delete. [onSetLocked]
+ * is null for someone who may not lock it: not its owner, or without a PIN. [onSetKept] is null for a link.
+ */
 @Composable
-private fun DocumentMenu(onEdit: () -> Unit, onDelete: () -> Unit, onSetLocked: ((Boolean) -> Unit)?, isLocked: Boolean) {
+private fun DocumentMenu(
+    onEdit: (() -> Unit)?,
+    onDelete: () -> Unit,
+    onSetLocked: ((Boolean) -> Unit)?,
+    isLocked: Boolean,
+    onSetKept: ((Boolean) -> Unit)?,
+    isKept: Boolean,
+) {
     var expanded by remember { mutableStateOf(false) }
+    if (onEdit == null && onSetKept == null) return
     Box {
         IconButton(onClick = { expanded = true }) {
             AppIcon(AppIcons.MoreVert, stringResource(CoreR.string.core_ui_more_options))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            if (onSetKept != null) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(if (isKept) R.string.feature_documents_unkeep else R.string.feature_documents_keep)) },
+                    leadingIcon = { AppIcon(if (isKept) AppIcons.CloudOff else AppIcons.Download, null) },
+                    onClick = {
+                        expanded = false
+                        onSetKept(!isKept)
+                    },
+                )
+            }
+            if (onEdit == null) return@DropdownMenu
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.feature_documents_edit)) },
                 leadingIcon = { AppIcon(AppIcons.Edit, null) },
@@ -544,10 +699,16 @@ private fun DocumentDetailScreenPreview() {
             fetching = false,
             onBack = {},
             onEdit = {},
+            shares = emptyList(),
+            isKept = false,
             onSetFavorite = {},
             onDelete = {},
             onUnlock = {},
             onSetLocked = {},
+            onShareLink = {},
+            onSendLink = { _, _ -> },
+            onStopLink = {},
+            onSetKept = {},
             onOpen = {},
             onShare = {},
             onPrint = {},

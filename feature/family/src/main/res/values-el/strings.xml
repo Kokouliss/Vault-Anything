@@ -105,4 +105,5 @@
     <string name="feature_family_activity_opened">%1$s άνοιξε: %2$s</string>
     <string name="feature_family_activity_deleted">%1$s διέγραψε: %2$s</string>
     <string name="feature_family_activity_pin_reset">%1$s έδωσε νέο PIN σε %2$s</string>
+    <string name="feature_family_activity_shared">%1$s έφτιαξε σύνδεσμο για: %2$s</string>
 </resources>

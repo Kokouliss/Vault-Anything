@@ -2,6 +2,8 @@ package com.kokouliss.vaultanything.core.domain.repository
 
 import com.kokouliss.vaultanything.core.domain.model.Document
 import com.kokouliss.vaultanything.core.domain.model.DocumentDetails
+import com.kokouliss.vaultanything.core.domain.model.SHARE_HOURS
+import com.kokouliss.vaultanything.core.domain.model.Share
 import kotlinx.coroutines.flow.Flow
 
 /** What came of adding a document with a file. */
@@ -66,4 +68,19 @@ interface DocumentRepository {
      * not be fetched.
      */
     suspend fun fetchFile(document: Document): String?
+
+    /** The links to the file of [document] that still work, the one to run out first on top. */
+    fun observeShares(document: Document): Flow<List<Share>>
+
+    /** Makes a link to the file of [document] that works for [hours], one of [SHARE_HOURS]. Null when the server could not do it. */
+    suspend fun share(document: Document, hours: Int): Share?
+
+    /** Stops a link before its time. False when the server could not be reached. */
+    suspend fun unshare(shareId: String): Boolean
+
+    /** Whether the file of [document] is kept on this phone, to open without a connection. */
+    suspend fun isKept(document: Document): Boolean
+
+    /** Keeps the file of [document] on this phone, or lets it go. False when it could not be fetched. */
+    suspend fun setKept(document: Document, kept: Boolean): Boolean
 }

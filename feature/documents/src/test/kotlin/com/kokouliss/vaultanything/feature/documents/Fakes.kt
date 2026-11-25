@@ -3,6 +3,7 @@ package com.kokouliss.vaultanything.feature.documents
 import com.kokouliss.vaultanything.core.domain.model.ActivityEntry
 import com.kokouliss.vaultanything.core.domain.model.Document
 import com.kokouliss.vaultanything.core.domain.model.DocumentDetails
+import com.kokouliss.vaultanything.core.domain.model.Share
 import com.kokouliss.vaultanything.core.domain.model.DocumentKind
 import com.kokouliss.vaultanything.core.domain.model.JoinResult
 import com.kokouliss.vaultanything.core.domain.model.Role
@@ -106,6 +107,29 @@ internal class FakeDocumentRepository : DocumentRepository {
     }
 
     override suspend fun fetchFile(document: Document): String? = null
+
+    val shares = MutableStateFlow(emptyList<Share>())
+    val kept = mutableSetOf<String>()
+
+    override fun observeShares(document: Document): Flow<List<Share>> = shares.map { all -> all.filter { it.documentId == document.id } }
+
+    override suspend fun share(document: Document, hours: Int): Share {
+        val share = Share("sh${shares.value.size + 1}", document.id, "Me", hours * 3_600_000L, "https://example.com/s/x")
+        shares.value += share
+        return share
+    }
+
+    override suspend fun unshare(shareId: String): Boolean {
+        shares.value = shares.value.filter { it.id != shareId }
+        return true
+    }
+
+    override suspend fun isKept(document: Document) = document.id in kept
+
+    override suspend fun setKept(document: Document, kept: Boolean): Boolean {
+        if (kept) this.kept += document.id else this.kept -= document.id
+        return true
+    }
 }
 
 internal class FakeLockRepository(hasPin: Boolean = false) : LockRepository {

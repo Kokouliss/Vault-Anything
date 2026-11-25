@@ -49,6 +49,7 @@ object AppIcons {
     val Lock = R.drawable.core_ui_ic_lock
     val LockOpen = R.drawable.core_ui_ic_lock_open
     val History = R.drawable.core_ui_ic_history
+    val Download = R.drawable.core_ui_ic_download
 }
 
 /** Pass null as [contentDescription] only when the icon sits next to text that says the same. */

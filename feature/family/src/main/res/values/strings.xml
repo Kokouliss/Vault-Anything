@@ -105,4 +105,5 @@
     <string name="feature_family_activity_opened">%1$s opened %2$s</string>
     <string name="feature_family_activity_deleted">%1$s deleted %2$s</string>
     <string name="feature_family_activity_pin_reset">%1$s gave %2$s a new PIN</string>
+    <string name="feature_family_activity_shared">%1$s made a link to %2$s</string>
 </resources>

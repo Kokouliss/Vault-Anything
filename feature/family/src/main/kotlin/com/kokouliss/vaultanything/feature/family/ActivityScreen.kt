@@ -115,6 +115,7 @@ private fun ActivityEntry.sentence(): String = when (action) {
     ActivityAction.ADDED -> stringResource(R.string.feature_family_activity_added, actorName, documentTitle.orEmpty())
     ActivityAction.OPENED -> stringResource(R.string.feature_family_activity_opened, actorName, documentTitle.orEmpty())
     ActivityAction.DELETED -> stringResource(R.string.feature_family_activity_deleted, actorName, documentTitle.orEmpty())
+    ActivityAction.SHARED -> stringResource(R.string.feature_family_activity_shared, actorName, documentTitle.orEmpty())
     ActivityAction.PIN_RESET -> stringResource(R.string.feature_family_activity_pin_reset, actorName, memberName.orEmpty())
 }
 

@@ -77,6 +77,23 @@ class DocumentDetailViewModelTest {
     }
 
     @Test
+    fun `a link is made and listed until it is stopped, and a kept copy is remembered`() = runTest {
+        val viewModel = viewModel("d1", User("u3", "Nikos", null))
+        viewModel.shares.test {
+            assertThat(expectMostRecentItem()).isEmpty()
+            val share = viewModel.share(24)
+            assertThat(share?.documentId).isEqualTo("d1")
+            assertThat(expectMostRecentItem()).containsExactly(share)
+            viewModel.unshare(share!!.id)
+            assertThat(expectMostRecentItem()).isEmpty()
+        }
+        assertThat(viewModel.kept.value).isFalse()
+        assertThat(viewModel.setKept(true)).isTrue()
+        assertThat(viewModel.kept.value).isTrue()
+        assertThat(documents.kept).containsExactly("d1")
+    }
+
+    @Test
     fun `a deleted document closes the screen`() = runTest {
         val viewModel = viewModel("d1", User("u3", "Nikos", null))
         viewModel.uiState.test {

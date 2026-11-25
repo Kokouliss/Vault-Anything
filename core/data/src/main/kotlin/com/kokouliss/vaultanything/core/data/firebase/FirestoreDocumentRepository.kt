@@ -3,6 +3,7 @@ package com.kokouliss.vaultanything.core.data.firebase
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.util.Log
 import android.webkit.MimeTypeMap
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.Blob
@@ -13,6 +14,8 @@ import com.google.firebase.firestore.MetadataChanges
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.QuerySnapshot
 import com.google.firebase.firestore.snapshots
+import com.google.firebase.functions.FirebaseFunctions
+import com.google.firebase.functions.FirebaseFunctionsException
 import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.StorageException
 import com.google.firebase.storage.StorageReference
@@ -25,6 +28,7 @@ import com.kokouliss.vaultanything.core.domain.model.DocumentDetails
 import com.kokouliss.vaultanything.core.domain.model.DocumentKind
 import com.kokouliss.vaultanything.core.domain.model.MAX_FILE_BYTES
 import com.kokouliss.vaultanything.core.domain.model.MAX_TITLE_LENGTH
+import com.kokouliss.vaultanything.core.domain.model.Share
 import com.kokouliss.vaultanything.core.domain.repository.AddResult
 import com.kokouliss.vaultanything.core.domain.repository.DocumentRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -51,6 +55,7 @@ internal class FirestoreDocumentRepository @Inject constructor(
     private val thumbnails: Thumbnails,
     private val textReader: TextReader,
     private val activity: FirestoreActivityRepository,
+    private val functions: FirebaseFunctions,
     @ApplicationContext private val context: Context,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     @ApplicationScope private val applicationScope: CoroutineScope,
@@ -170,13 +175,17 @@ internal class FirestoreDocumentRepository @Inject constructor(
         // covers a delete made offline.
         documents(document.spaceId).document(document.id).delete().logFailure("delete document")
         activity.log(document.spaceId, ActivityAction.DELETED, document)
-        withContext(ioDispatcher) { cacheFile(document).delete() }
+        withContext(ioDispatcher) {
+            cacheFile(document).delete()
+            keptFile(document).delete()
+        }
     }
 
     override suspend fun fetchFile(document: Document): String? {
         if (document.kind == DocumentKind.LINK || !document.isUploaded) return null
         val file = cacheFile(document)
         return withContext(ioDispatcher) {
+            keptFile(document).takeIf { it.exists() }?.let { return@withContext it.absolutePath }
             if (file.exists()) return@withContext file.absolutePath
             try {
                 file.parentFile?.mkdirs()
@@ -190,6 +199,61 @@ internal class FirestoreDocumentRepository @Inject constructor(
                 null
             }
         }
+    }
+
+    override fun observeShares(document: Document): Flow<List<Share>> =
+        // All three fields, so the rules can check a list (see shares in firebase/firestore.rules).
+        db.collection(Collections.SHARES)
+            .whereEqualTo(Fields.SPACE_ID, document.spaceId)
+            .whereEqualTo(Fields.DOCUMENT_ID, document.id)
+            .whereEqualTo(Fields.OWNER_ID, document.ownerId)
+            .snapshots()
+            .map { snapshot ->
+                // A link that ran out stays listed until expireShares in firebase/functions gets to it.
+                val now = System.currentTimeMillis()
+                snapshot.documents.mapNotNull { it.toShare() }.filter { it.expiresAtMillis > now }.sortedBy { it.expiresAtMillis }
+            }
+            .catch { e -> if (e is FirebaseFirestoreException) emit(emptyList()) else throw e }
+
+    override suspend fun share(document: Document, hours: Int): Share? = try {
+        val data = mapOf(Fields.SPACE_ID to document.spaceId, Fields.DOCUMENT_ID to document.id, "hours" to hours)
+        val result = functions.getHttpsCallable("shareDocument").call(data).await().data as Map<*, *>
+        Share(
+            id = result["id"] as String,
+            documentId = document.id,
+            createdByName = auth.requireUser().memberName,
+            expiresAtMillis = (result["expiresAtMillis"] as Number).toLong(),
+            url = result["url"] as String,
+        )
+    } catch (e: FirebaseFunctionsException) {
+        Log.w("VaultAnythingShare", "shareDocument failed", e)
+        null
+    }
+
+    override suspend fun unshare(shareId: String): Boolean = try {
+        functions.getHttpsCallable("unshareDocument").call(mapOf("shareId" to shareId)).await()
+        true
+    } catch (e: FirebaseFunctionsException) {
+        Log.w("VaultAnythingShare", "unshareDocument failed", e)
+        false
+    }
+
+    override suspend fun isKept(document: Document): Boolean = withContext(ioDispatcher) { keptFile(document).exists() }
+
+    override suspend fun setKept(document: Document, kept: Boolean): Boolean {
+        val file = keptFile(document)
+        if (!kept) {
+            withContext(ioDispatcher) { file.delete() }
+            return true
+        }
+        val fetched = fetchFile(document) ?: return false
+        withContext(ioDispatcher) {
+            if (fetched != file.absolutePath) {
+                file.parentFile?.mkdirs()
+                File(fetched).copyTo(file, overwrite = true)
+            }
+        }
+        return true
     }
 
     private fun documents(spaceId: String) =
@@ -215,6 +279,13 @@ internal class FirestoreDocumentRepository @Inject constructor(
     /** Downloads are kept here, and shared from here through the app's FileProvider. */
     private fun cacheFile(document: Document) =
         File(context.cacheDir, "documents/${document.id}/${safeFileName(document.fileName)}")
+
+    /**
+     * Copies kept for travel: outside the cache, so the phone never clears them.
+     * shortcut: a copy of a document deleted on another phone stays until the app's storage is cleared, add a sweep against the list if that bothers.
+     */
+    private fun keptFile(document: Document) =
+        File(context.filesDir, "offline/${document.id}/${safeFileName(document.fileName)}")
 
     private class PickedFile(val name: String, val mimeType: String, val sizeBytes: Long)
 

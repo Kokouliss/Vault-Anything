@@ -2,6 +2,7 @@ package com.kokouliss.vaultanything.core.data.firebase
 
 import android.util.Log
 import com.google.android.gms.tasks.Task
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.DocumentSnapshot
@@ -12,6 +13,7 @@ import com.kokouliss.vaultanything.core.domain.model.Document
 import com.kokouliss.vaultanything.core.domain.model.DocumentCategory
 import com.kokouliss.vaultanything.core.domain.model.DocumentDetails
 import com.kokouliss.vaultanything.core.domain.model.DocumentKind
+import com.kokouliss.vaultanything.core.domain.model.Emergency
 import com.kokouliss.vaultanything.core.domain.model.ImageData
 import com.kokouliss.vaultanything.core.domain.model.Member
 import com.kokouliss.vaultanything.core.domain.model.Role
@@ -25,18 +27,22 @@ import kotlinx.coroutines.flow.distinctUntilChangedBy
 
 // Document layout. firebase/firestore.rules and firebase/storage.rules validate the same names; change them together.
 //
-// spaces/{spaceId}                         name, ownerId, memberIds[], members{uid: {name, role}}, inviteCode, invitedEmails[], createdAt
-//                                          role is "adult" or "child". The owner is always an adult.
+// spaces/{spaceId}                         name, ownerId, memberIds[], members{uid: {name, role, birthDay?}}, inviteCode, invitedEmails[], createdAt
+//                                          role is "adult" or "child". The owner is always an adult. birthDay (days since 1970) is set
+//                                          by an adult; comeOfAge in firebase/functions makes the child an adult on their 18th birthday.
 // invites/{inviteCode}                     spaceId
 // spaces/{spaceId}/documents/{documentId}  ownerId: whose document it is; title, kind (file|image|link), category, tags[], favorite,
 //                                          expiresDay?, note?, link?, fileName?, mimeType?, sizeBytes?, uploaded?, thumbnail? (JPEG bytes),
 //                                          text?, locked, addedById, addedByName, createdAt, updatedAt
 //                                          locked: behind the owner's PIN. Other adults see it only with an unlock (below).
-// spaces/{spaceId}/activity/{entryId}      at, actorId, actorName, action (added|opened|deleted|pin_reset), documentId?, documentTitle?,
-//                                          memberId?, memberName?. Read by adults; written by the member it is about, pin_reset by functions.
+// spaces/{spaceId}/activity/{entryId}      at, actorId, actorName, action (added|opened|deleted|shared|pin_reset|grew_up|emergency),
+//                                          documentId?, documentTitle?, memberId?, memberName?. Read by adults; written by the member
+//                                          it is about, the last four by functions.
 // spaces/{spaceId}/unlocks/{memberId}      grants {ownerId: until}. Written by verifyPin in firebase/functions, read by the rules only.
-// users/{uid}                              hasPin. Written by setPin in firebase/functions; the PIN's hash sits under users/{uid}/private/lock,
-//                                          which no phone reads.
+// users/{uid}                              hasPin, emergency? {contactId, waitDays, askedAt?}. hasPin is written by setPin in
+//                                          firebase/functions; the PIN's hash sits under users/{uid}/private/lock, which no phone reads.
+//                                          emergency is the person's own choice of contact and wait; askedAt is written by askEmergency
+//                                          in firebase/functions and cleared by the person. The contact lists the people who named them.
 // users/{uid}/tokens/{token}               updatedAt. One per device that gets this person's notifications.
 // shares/{shareId}                         spaceId, documentId, ownerId, createdById, createdByName, title, fileName, token, url,
 //                                          expiresAt, createdAt. A link to one file for anyone, until expiresAt. Written by
@@ -83,6 +89,11 @@ internal object Fields {
     const val ADDED_BY_ID = "addedById"
     const val ADDED_BY_NAME = "addedByName"
     const val HAS_PIN = "hasPin"
+    const val BIRTH_DAY = "birthDay"
+    const val EMERGENCY = "emergency"
+    const val CONTACT_ID = "contactId"
+    const val WAIT_DAYS = "waitDays"
+    const val ASKED_AT = "askedAt"
     const val AT = "at"
     const val ACTOR_ID = "actorId"
     const val ACTOR_NAME = "actorName"
@@ -103,7 +114,11 @@ internal fun DocumentSnapshot.toSpace(): Space? {
         .mapNotNull { (id, entry) ->
             val map = entry as? Map<*, *>
             val name = map?.get(Fields.NAME) as? String
-            if (id is String && name != null) Member(id, name, Role.fromKey(map[Fields.ROLE] as? String) ?: Role.CHILD) else null
+            if (id is String && name != null) {
+                Member(id, name, Role.fromKey(map[Fields.ROLE] as? String) ?: Role.CHILD, (map[Fields.BIRTH_DAY] as? Number)?.toLong())
+            } else {
+                null
+            }
         }
         .sortedWith(compareByDescending<Member> { it.id == ownerId }.thenBy { it.role }.thenBy { it.name.lowercase() })
     return Space(
@@ -173,6 +188,17 @@ internal fun DocumentSnapshot.toShare(): Share? {
         createdByName = getString(Fields.CREATED_BY_NAME).orEmpty(),
         expiresAtMillis = getTimestamp(Fields.EXPIRES_AT)?.toDate()?.time ?: 0L,
         url = url,
+    )
+}
+
+/** The emergency contact a users/{uid} document names, or null without one. */
+internal fun DocumentSnapshot.toEmergency(): Emergency? {
+    val map = get(Fields.EMERGENCY) as? Map<*, *> ?: return null
+    val contactId = map[Fields.CONTACT_ID] as? String ?: return null
+    return Emergency(
+        contactId = contactId,
+        waitDays = (map[Fields.WAIT_DAYS] as? Number)?.toInt() ?: return null,
+        askedAtMillis = (map[Fields.ASKED_AT] as? Timestamp)?.toDate()?.time,
     )
 }
 

@@ -76,7 +76,8 @@ internal class FirestoreLockRepository @Inject constructor(
     override suspend fun resetPin(spaceId: String, memberId: String, pin: String) =
         call("resetPin", mapOf("spaceId" to spaceId, "memberId" to memberId, "pin" to pin))
 
-    private fun open(ownerId: String) {
+    /** Shows [ownerId]'s locked documents for [UNLOCK_MINUTES], as after their PIN. */
+    internal fun open(ownerId: String) {
         val runsOut = System.currentTimeMillis() + UNLOCK_MINUTES.minutes.inWholeMilliseconds
         until.update { it + (ownerId to runsOut) }
         scope.launch {

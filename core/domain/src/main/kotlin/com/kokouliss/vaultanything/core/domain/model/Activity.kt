@@ -8,7 +8,11 @@ enum class ActivityAction(val key: String) {
     /** Made a link to a document's file for someone outside the family. */
     SHARED("shared"),
     /** An adult gave a child a new PIN. Written by firebase/functions. */
-    PIN_RESET("pin_reset");
+    PIN_RESET("pin_reset"),
+    /** A child turned [ADULT_AGE] and became an adult. Written by firebase/functions. */
+    GREW_UP("grew_up"),
+    /** Someone's emergency contact opened their locked documents. Written by firebase/functions. */
+    EMERGENCY("emergency");
 
     companion object {
         fun fromKey(key: String?): ActivityAction? = entries.firstOrNull { it.key == key }

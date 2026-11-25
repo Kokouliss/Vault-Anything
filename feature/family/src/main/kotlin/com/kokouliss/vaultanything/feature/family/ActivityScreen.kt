@@ -117,6 +117,8 @@ private fun ActivityEntry.sentence(): String = when (action) {
     ActivityAction.DELETED -> stringResource(R.string.feature_family_activity_deleted, actorName, documentTitle.orEmpty())
     ActivityAction.SHARED -> stringResource(R.string.feature_family_activity_shared, actorName, documentTitle.orEmpty())
     ActivityAction.PIN_RESET -> stringResource(R.string.feature_family_activity_pin_reset, actorName, memberName.orEmpty())
+    ActivityAction.GREW_UP -> stringResource(R.string.feature_family_activity_grew_up, actorName)
+    ActivityAction.EMERGENCY -> stringResource(R.string.feature_family_activity_emergency, actorName, memberName.orEmpty())
 }
 
 @PreviewLightDark

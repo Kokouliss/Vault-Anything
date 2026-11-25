@@ -1,9 +1,10 @@
 const functions = require('firebase-functions/v1');
 const { randomBytes, scryptSync, timingSafeEqual } = require('node:crypto');
 const { initializeApp } = require('firebase-admin/app');
-const { FieldValue, Timestamp, getFirestore } = require('firebase-admin/firestore');
+const { FieldPath, FieldValue, Timestamp, getFirestore } = require('firebase-admin/firestore');
 const { getStorage } = require('firebase-admin/storage');
 const { getMessaging } = require('firebase-admin/messaging');
+const { DAY_MILLIS, todayInAthens, birthdayAt } = require('./dates');
 
 initializeApp();
 
@@ -41,8 +42,7 @@ exports.remindExpiring = europe.pubsub
   .timeZone('Europe/Athens')
   .onRun(async () => {
     const db = getFirestore();
-    // Days since 1970 of today's date in Greece, the count the app keeps in expiresDay.
-    const today = Math.floor(Date.parse(new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Athens' })) / 86_400_000);
+    const today = todayInAthens();
     const due = await db
       .collectionGroup('documents')
       .where('expiresDay', 'in', REMINDER_DAYS.map((days) => today + days))
@@ -61,6 +61,45 @@ exports.remindExpiring = europe.pubsub
         channelId: 'reminders',
         tag: document.id,
       });
+    }
+  });
+
+// How old a child is when they become an adult. ADULT_AGE in the app says the same.
+const ADULT_AGE = 18;
+
+// Every night, a child whose 18th birthday is today, or went by while this did not run, becomes an
+// adult. Their documents lock at the same time, so the new adult chooses what the parents keep
+// seeing by unlocking them. They are told, and so is the rest of the space.
+exports.comeOfAge = europe.pubsub
+  .schedule('every day 00:10')
+  .timeZone('Europe/Athens')
+  .onRun(async () => {
+    const db = getFirestore();
+    const today = todayInAthens();
+    // shortcut: reads every space each night, which is fine for a few hundred families; keep the
+    // next birthdays in a collection of their own once there are many more.
+    const spaces = await db.collection('spaces').get();
+    for (const space of spaces.docs) {
+      const members = space.get('members') || {};
+      for (const [id, member] of Object.entries(members)) {
+        if (member.role === 'adult' || typeof member.birthDay !== 'number' || birthdayAt(member.birthDay, ADULT_AGE) > today) continue;
+        const theirs = await space.ref.collection('documents').where('ownerId', '==', id).get();
+        await Promise.all(theirs.docs.map((document) => document.ref.update({ locked: true })));
+        await db.batch()
+          .update(space.ref, new FieldPath('members', id, 'role'), 'adult')
+          .create(space.ref.collection('activity').doc(), {
+            at: FieldValue.serverTimestamp(),
+            actorId: id,
+            actorName: member.name,
+            action: 'grew_up',
+            memberId: id,
+            memberName: member.name,
+          })
+          .commit();
+        const others = Object.keys(members).filter((other) => other !== id);
+        await notify(db, [id], {}, { titleLocKey: 'push_grew_up_you_title', bodyLocKey: 'push_grew_up_you', channelId: 'reminders', tag: `adult-${space.id}` });
+        await notify(db, others, {}, { title: member.name, bodyLocKey: 'push_grew_up', channelId: 'reminders', tag: `adult-${space.id}-${id}` });
+      }
     }
   });
 
@@ -223,6 +262,65 @@ exports.resetPin = europe.https.onCall(async (data, context) => {
     memberName: them.name,
   });
   return { result: 'ok' };
+});
+
+// Emergency access. A person names, on their profile, an adult they share a space with and a wait
+// (users/{uid}.emergency, written by the app; the rules check its shape). The contact asks here,
+// which starts the wait and tells the person, who can take the request back in the app. Once the
+// wait is over the contact opens the person's locked documents in every shared space, for
+// UNLOCK_MINUTES at a time like after a PIN, and the person is told each time.
+
+/** The spaces where `contactId` is an adult and `ownerId` a member. */
+async function sharedSpaces(db, contactId, ownerId) {
+  const mine = await db.collection('spaces').where('memberIds', 'array-contains', contactId).get();
+  return mine.docs.filter((space) => {
+    const members = space.get('members') || {};
+    return members[contactId]?.role === 'adult' && members[ownerId];
+  });
+}
+
+/** The caller as the emergency contact of `ownerId`, or an error. */
+async function emergencyOf(db, context, ownerId) {
+  const auth = requireAuth(context);
+  if (typeof ownerId !== 'string') throw new HttpsError('invalid-argument', 'ownerId is needed.');
+  const user = await db.doc(`users/${ownerId}`).get();
+  const emergency = user.get('emergency');
+  if (!emergency || emergency.contactId !== auth.uid) throw new HttpsError('permission-denied', 'Not their emergency contact.');
+  const spaces = await sharedSpaces(db, auth.uid, ownerId);
+  if (spaces.length === 0) throw new HttpsError('permission-denied', 'No shared space where you are an adult.');
+  return { auth, user, emergency, spaces, me: spaces[0].get('members')[auth.uid] };
+}
+
+exports.askEmergency = europe.https.onCall(async (data, context) => {
+  const db = getFirestore();
+  const { auth, user, emergency, me } = await emergencyOf(db, context, data?.ownerId);
+  if (emergency.askedAt) return { result: 'ok' };
+  await user.ref.update({ 'emergency.askedAt': FieldValue.serverTimestamp() });
+  await notify(db, [user.id], {}, { title: me.name, bodyLocKey: 'push_emergency_asked', channelId: 'reminders', tag: `emergency-${auth.uid}` });
+  return { result: 'ok' };
+});
+
+exports.openEmergency = europe.https.onCall(async (data, context) => {
+  const db = getFirestore();
+  const { auth, user, emergency, spaces, me } = await emergencyOf(db, context, data?.ownerId);
+  // Written so that a missing or odd value fails: NaN compares false.
+  if (!(emergency.askedAt && emergency.askedAt.toMillis() + emergency.waitDays * DAY_MILLIS <= Date.now())) {
+    throw new HttpsError('failed-precondition', 'The wait is not over.');
+  }
+  const until = Timestamp.fromMillis(Date.now() + UNLOCK_MINUTES * 60_000);
+  for (const space of spaces) {
+    await db.doc(`spaces/${space.id}/unlocks/${auth.uid}`).set({ grants: { [user.id]: until } }, { merge: true });
+    await space.ref.collection('activity').add({
+      at: FieldValue.serverTimestamp(),
+      actorId: auth.uid,
+      actorName: me.name,
+      action: 'emergency',
+      memberId: user.id,
+      memberName: space.get('members')[user.id].name,
+    });
+  }
+  await notify(db, [user.id], {}, { title: me.name, bodyLocKey: 'push_emergency_opened', channelId: 'reminders', tag: `emergency-${auth.uid}` });
+  return { result: 'ok', untilMillis: until.toMillis() };
 });
 
 // Share links. One opens the file of one document for anyone who has it, no sign-in needed, until

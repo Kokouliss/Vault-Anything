@@ -145,6 +145,12 @@ internal class FirestoreSpaceRepository @Inject constructor(
             .logFailure("cancel email invite")
     }
 
+    override suspend fun setBirthday(spaceId: String, memberId: String, day: Long?) {
+        spaces.document(spaceId)
+            .update(FieldPath.of(Fields.MEMBERS, memberId, Fields.BIRTH_DAY), day ?: FieldValue.delete())
+            .logFailure("set the birthday")
+    }
+
     override suspend fun setRole(spaceId: String, memberId: String, role: Role) {
         spaces.document(spaceId)
             .update(FieldPath.of(Fields.MEMBERS, memberId, Fields.ROLE), role.key)

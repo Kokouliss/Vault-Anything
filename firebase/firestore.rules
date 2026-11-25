@@ -58,11 +58,23 @@ service cloud.firestore {
         && roleOf(space, space.ownerId) == 'adult';
     }
 
-    // One member's entry: the name the family sees and whether they are an adult or a child.
+    // One member's entry: the name the family sees, whether they are an adult or a child, and the
+    // birthday an adult may set (days since 1970), on which comeOfAge in firebase/functions makes
+    // a child an adult.
     function validMember(entry) {
-      return entry.keys().hasOnly(['name', 'role', 'inviteCode'])
+      return entry.keys().hasOnly(['name', 'role', 'inviteCode', 'birthDay'])
         && entry.name is string && entry.name.size() > 0 && entry.name.size() <= 100
-        && entry.role in ['adult', 'child'];
+        && entry.role in ['adult', 'child']
+        && (!('birthDay' in entry) || entry.birthDay is int);
+    }
+
+    // The person's own choice of emergency contact and wait, or nothing. askedAt, the start of the
+    // wait, is written by askEmergency in firebase/functions only; writing the choice again drops it.
+    function validEmergency(emergency) {
+      return emergency == null
+        || (emergency.keys().hasOnly(['contactId', 'waitDays'])
+          && emergency.contactId is string && emergency.contactId != uid()
+          && emergency.waitDays in [1, 7, 30]);
     }
 
     function validDocument(document) {
@@ -234,11 +246,12 @@ service cloud.firestore {
           && validMember(newEntry(request.resource.data.ownerId));
       }
 
-      // An adult makes another member an adult or a child. Not themselves, and not the owner, who
-      // is always an adult. The member entry that changed cannot be named in a rule, so neither its
-      // name nor its new role value is checked here: an adult could rename that member in the same
-      // write, or store a made-up role, which the app never does and which gives away nothing,
-      // because every role other than 'adult' counts as child (roleOf above and Role in the app).
+      // An adult makes another member an adult or a child, or sets their birthday. Not themselves,
+      // and not the owner, who is always an adult. The member entry that changed cannot be named in
+      // a rule, so neither its name nor its new values are checked here: an adult could rename that
+      // member in the same write, or store a made-up role, which the app never does and which gives
+      // away nothing, because every role other than 'adult' counts as child (roleOf above and Role
+      // in the app) and comeOfAge ignores a birthday that is not a number.
       function setsRole() {
         return isAdult(resource.data)
           && changedFields().hasOnly(['members'])
@@ -308,7 +321,8 @@ service cloud.firestore {
 
       // Who added, opened and deleted which document, for the adults. Members write their own
       // entries at the server's time; nothing is changed or removed. firebase/functions adds the
-      // PIN resets with admin rights.
+      // links made, the PIN resets, the children who came of age and the emergency openings with
+      // admin rights.
       match /activity/{entryId} {
         allow read: if isSpaceMember(spaceId) && isAdult(space(spaceId));
 
@@ -330,9 +344,18 @@ service cloud.firestore {
 
     // hasPin: whether this person set a PIN, so the app knows what to offer. Written by setPin in
     // firebase/functions, which keeps the PIN itself out of reach under users/{userId}/private/lock.
+    // emergency: the person's own choice of contact and wait (validEmergency above). The contact
+    // finds the people who named them with the one query the app sends, on emergency.contactId.
     match /users/{userId} {
       allow get: if signedIn() && uid() == userId;
-      allow list, write: if false;
+      allow list: if signedIn() && resource.data.emergency.contactId == uid();
+      allow create: if signedIn() && uid() == userId
+        && request.resource.data.keys().hasOnly(['emergency'])
+        && validEmergency(request.resource.data.get('emergency', null));
+      allow update: if signedIn() && uid() == userId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['emergency'])
+        && validEmergency(request.resource.data.get('emergency', null));
+      allow delete: if false;
     }
 
     // The devices that get a person's notifications. Only that person's own devices write here;

@@ -14,14 +14,14 @@ A family document vault for Android. Create a family space, invite the others, a
 - **Activity** in the space menu, for adults: who added, opened or deleted which document, who made a link to one, and who gave a child a new PIN. Opening one's own documents is not logged.
 - **A link for someone outside the family.** "Link" on a document makes a web link to its file that works for an hour, a day or a week, for anyone who has it, without signing in: a doctor, an insurer, a school. The links still working are listed under the document, where a tap sends one again and the cross stops it early. Who made a link shows in the activity log.
 - **Keep on this phone**, in a document's menu, keeps a copy of its file for a trip: it opens, shares and prints with no connection. The list and the thumbnails are on the phone anyway.
+- **A child turns 18.** An adult sets a child's birthday in the members list (the calendar next to the child). On the 18th birthday the child becomes an adult by itself, and every document of theirs locks at the same time: the new adult unlocks the ones the parents may keep seeing. They get a notification saying so, the rest of the space gets one too, and the activity log keeps the day.
+- **Emergency access.** On the profile page, a person names an adult they share a space with as their trusted person, with a wait of 1, 7 or 30 days. The trusted person asks from their own profile page; the person is told and can say no until the wait is over. After it, the trusted person opens the person's locked documents in their shared spaces without the PIN, 15 minutes at a time, and the person is told each time. The activity log says who opened whose. Taking the request back or changing the trusted person ends it.
 - **Open, share, print.** A document opens in the app the phone uses for it, goes through the share sheet to email, messaging apps, nearby phones and printers, and pictures and PDFs print straight from the app.
 - **Share into the vault.** "Share" a file, a picture or a link from any other app to Vault Anything, pick the family space, and it becomes a document.
 - **Invites** work four ways: a code anyone can type, a QR code, a link, or an invitation for one email address (shown inside the app when that person signs in with it).
 - **Leaving** a space, being removed from it or deleting the account deletes that person's documents in it. The family keeps nothing of someone who is gone.
 - **Delete account** in Settings leaves every space (a space you own goes to the next adult, an empty one is deleted) and removes the sign-in. The Play Store requires this of apps with accounts.
 - Sign-in is with Google, or with an email and password (with a new-password link and an email to confirm the address). Everything lives in the cloud, so a new phone shows the same documents after signing in. The app is in English and Greek. It follows the phone's language until another one is chosen on the **profile page**, which also has sign out.
-
-Coming next: emergency access for a trusted person, and a child turning 18 and choosing what the parents keep seeing.
 
 ## Set up Firebase (once, about fifteen minutes)
 
@@ -88,7 +88,7 @@ A build without `app/google-services.json` still works, but only shows a "Setup 
 
 ```
 ./gradlew testDebugUnitTest :core:domain:test   # unit tests
-cd firebase && npm install && npm test          # security rules, on the local Firestore and Storage emulators
+cd firebase && npm install && npm test          # security rules, on the local Firestore and Storage emulators, and the functions' day arithmetic
 ```
 
 The rules tests need Node 20 or newer and Java 21 or newer. Run them before publishing a change to `firebase/firestore.rules` or `firebase/storage.rules`. GitHub runs all of them on every pull request.
@@ -126,4 +126,6 @@ The Firestore document layout is described at the top of `core/data/src/main/kot
 - Email invitations show up inside the app when the invited person signs in with that address. No email is sent.
 - Deleting a space, a document or a member's documents on leaving is finished by a Cloud Function. Until `firebase deploy` has run, deleted spaces leave their documents and files stored where nobody can reach them.
 - A document's file, kind, owner and link cannot be changed after it is added; its title, category, tags, note, date and favorite can. To replace a file, add the document again and delete the old one.
-- An adult who changes another member's role could also change that member's name in the same write. The app never does; the rule cannot tell the two apart.
+- An adult who changes another member's role or birthday could also change that member's name in the same write. The app never does; the rule cannot tell the two apart.
+- A child becomes an adult in the night after their 18th birthday, Greek time, by a Cloud Function that reads every space. Until the functions are deployed, an adult changes the role by hand, as before.
+- Emergency access reaches the spaces the trusted person is an adult in. A space the person keeps to themselves stays closed, and a trusted person who leaves every shared space loses it.

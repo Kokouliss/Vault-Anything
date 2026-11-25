@@ -29,6 +29,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
@@ -47,6 +49,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -83,15 +86,17 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
+import com.kokouliss.vaultanything.core.domain.model.ADULT_AGE
 import com.kokouliss.vaultanything.core.domain.model.Document
 import com.kokouliss.vaultanything.core.domain.model.DocumentCategory
 import com.kokouliss.vaultanything.core.domain.model.DocumentDetails
 import com.kokouliss.vaultanything.core.domain.model.DocumentKind
 import com.kokouliss.vaultanything.core.domain.model.InviteCode
+import com.kokouliss.vaultanything.core.domain.model.MILLIS_PER_DAY
 import com.kokouliss.vaultanything.core.domain.model.Member
+import com.kokouliss.vaultanything.core.domain.model.Role as MemberRole
 import com.kokouliss.vaultanything.core.domain.model.Space
 import com.kokouliss.vaultanything.core.domain.model.normalizeEmail
-import com.kokouliss.vaultanything.core.domain.model.Role as MemberRole
 import com.kokouliss.vaultanything.core.domain.repository.PinResult
 import com.kokouliss.vaultanything.core.ui.R as CoreR
 import com.kokouliss.vaultanything.core.ui.component.AppIcon
@@ -116,6 +121,9 @@ import com.kokouliss.vaultanything.core.ui.component.pressScale
 import com.kokouliss.vaultanything.core.ui.component.rememberPaperScroll
 import com.kokouliss.vaultanything.core.ui.component.ruledPaper
 import com.kokouliss.vaultanything.core.ui.theme.VaultAnythingTheme
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import kotlinx.coroutines.launch
 
 private enum class SpaceDialog { None, Rename, Leave, Delete, ResetCode }
@@ -183,6 +191,7 @@ internal fun SpaceDetailRoute(
         onInviteEmail = viewModel::inviteEmail,
         onCancelEmailInvite = viewModel::cancelEmailInvite,
         onSetRole = viewModel::setRole,
+        onSetBirthday = viewModel::setBirthday,
         onRemoveMember = viewModel::removeMember,
         onLeaveSpace = viewModel::leaveSpace,
         onDeleteSpace = viewModel::deleteSpace,
@@ -263,6 +272,8 @@ internal fun SpaceDetailScreen(
     onInviteEmail: (String) -> Unit,
     onCancelEmailInvite: (String) -> Unit,
     onSetRole: (memberId: String, MemberRole) -> Unit,
+    /** An adult sets a child's birthday (days since 1970), or forgets it with null. */
+    onSetBirthday: (memberId: String, day: Long?) -> Unit,
     onRemoveMember: (memberId: String) -> Unit,
     onLeaveSpace: () -> Unit,
     onDeleteSpace: () -> Unit,
@@ -348,6 +359,7 @@ internal fun SpaceDetailScreen(
             onInviteEmail = onInviteEmail,
             onCancelEmailInvite = onCancelEmailInvite,
             onSetRole = onSetRole,
+            onSetBirthday = onSetBirthday,
             onRemoveMember = { memberToRemove = it },
             onResetPin = onResetPin,
         )
@@ -700,6 +712,7 @@ private fun MembersSheet(
     onInviteEmail: (String) -> Unit,
     onCancelEmailInvite: (String) -> Unit,
     onSetRole: (memberId: String, MemberRole) -> Unit,
+    onSetBirthday: (memberId: String, day: Long?) -> Unit,
     onRemoveMember: (memberId: String) -> Unit,
     onResetPin: (memberId: String) -> Unit,
 ) {
@@ -773,6 +786,12 @@ private fun MembersSheet(
                         // changes their own role (the security rules say the same).
                         onSetRole = if (state.isAdult && !isYou && !isSpaceOwner) {
                             { onSetRole(member.id, if (member.role == MemberRole.ADULT) MemberRole.CHILD else MemberRole.ADULT) }
+                        } else {
+                            null
+                        },
+                        // A child's birthday, so the server makes them an adult on their 18th (comeOfAge in firebase/functions).
+                        onSetBirthday = if (state.isAdult && !isYou && member.role == MemberRole.CHILD) {
+                            { day -> onSetBirthday(member.id, day) }
                         } else {
                             null
                         },
@@ -861,9 +880,11 @@ private fun MemberRow(
     isYou: Boolean,
     isSpaceOwner: Boolean,
     onSetRole: (() -> Unit)?,
+    onSetBirthday: ((day: Long?) -> Unit)?,
     onRemove: (() -> Unit)?,
     onResetPin: (() -> Unit)?,
 ) {
+    var pickingBirthday by rememberSaveable { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         InitialAvatar(member.name)
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
@@ -872,15 +893,24 @@ private fun MemberRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            val birthday = member.birthDay?.let(LocalDate::ofEpochDay)
             Hint(
-                stringResource(
-                    when {
-                        isSpaceOwner -> R.string.feature_family_owner
-                        member.role == MemberRole.ADULT -> R.string.feature_family_adult
-                        else -> R.string.feature_family_child
-                    },
-                ),
+                when {
+                    isSpaceOwner -> stringResource(R.string.feature_family_owner)
+                    member.role == MemberRole.ADULT -> stringResource(R.string.feature_family_adult)
+                    // The same day comeOfAge in firebase/functions uses, 29 February included.
+                    birthday != null -> stringResource(
+                        R.string.feature_family_child_until,
+                        birthday.plusYears(ADULT_AGE.toLong()).format(DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG)),
+                    )
+                    else -> stringResource(R.string.feature_family_child)
+                },
             )
+        }
+        if (onSetBirthday != null) {
+            IconButton(onClick = { pickingBirthday = true }) {
+                AppIcon(AppIcons.Event, stringResource(R.string.feature_family_set_birthday, member.name))
+            }
         }
         if (onSetRole != null) {
             val toAdult = member.role == MemberRole.CHILD
@@ -898,6 +928,30 @@ private fun MemberRow(
             IconButton(onClick = onRemove) {
                 AppIcon(AppIcons.Close, stringResource(R.string.feature_family_remove_member, member.name))
             }
+        }
+    }
+    if (pickingBirthday && onSetBirthday != null) {
+        // The picker counts in UTC days, which is also how the day is stored.
+        val picked = rememberDatePickerState((member.birthDay ?: LocalDate.now().minusYears(ADULT_AGE.toLong()).toEpochDay()) * MILLIS_PER_DAY)
+        DatePickerDialog(
+            onDismissRequest = { pickingBirthday = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    picked.selectedDateMillis?.let { onSetBirthday(it / MILLIS_PER_DAY) }
+                    pickingBirthday = false
+                }) { Text(stringResource(CoreR.string.core_ui_save)) }
+            },
+            dismissButton = {
+                if (member.birthDay != null) {
+                    TextButton(onClick = {
+                        onSetBirthday(null)
+                        pickingBirthday = false
+                    }) { Text(stringResource(R.string.feature_family_forget_birthday)) }
+                }
+                TextButton(onClick = { pickingBirthday = false }) { Text(stringResource(CoreR.string.core_ui_cancel)) }
+            },
+        ) {
+            DatePicker(picked, title = { Text(stringResource(R.string.feature_family_set_birthday, member.name), Modifier.padding(start = 24.dp, top = 16.dp)) })
         }
     }
 }
@@ -924,7 +978,7 @@ private fun SpaceDetailScreenPreview() {
                     name = "Our family",
                     ownerId = "u1",
                     inviteCode = "ABCD2345",
-                    members = listOf(Member("u1", "Panos", MemberRole.ADULT), Member("u2", "Maria", MemberRole.ADULT), Member("u3", "Nikos")),
+                    members = listOf(Member("u1", "Panos", MemberRole.ADULT), Member("u2", "Maria", MemberRole.ADULT), Member("u3", "Nikos", birthDay = today - 17 * 365)),
                     invitedEmails = listOf("grandma@example.com"),
                 ),
                 currentUserId = "u1",
@@ -949,6 +1003,7 @@ private fun SpaceDetailScreenPreview() {
             onInviteEmail = {},
             onCancelEmailInvite = {},
             onSetRole = { _, _ -> },
+            onSetBirthday = { _, _ -> },
             onRemoveMember = {},
             onLeaveSpace = {},
             onDeleteSpace = {},

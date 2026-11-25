@@ -25,6 +25,7 @@ class PushService : FirebaseMessagingService() {
 
         // The same words the system would show: the string the server names, in this phone's language.
         val text = pushText(push.bodyLocalizationKey)?.let { getString(it) } ?: push.body
+        val title = pushText(push.titleLocalizationKey)?.let { getString(it) } ?: push.title
         // Opens the document, like a tap on a reminder the system showed.
         val open = Intent(this, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -38,7 +39,7 @@ class PushService : FirebaseMessagingService() {
         )
         val notification = NotificationCompat.Builder(this, push.channelId ?: REMINDERS_CHANNEL)
             .setSmallIcon(CoreR.drawable.core_ui_ic_event)
-            .setContentTitle(push.title)
+            .setContentTitle(title)
             .setContentText(text)
             .setContentIntent(tap)
             .setAutoCancel(true)
@@ -48,10 +49,15 @@ class PushService : FirebaseMessagingService() {
     }
 }
 
-/** The app string that remindExpiring in firebase/functions names, or null for one this app does not know. */
+/** The app string that firebase/functions names, or null for one this app does not know. */
 internal fun pushText(key: String?): Int? = when (key) {
     "push_expires_month" -> R.string.push_expires_month
     "push_expires_week" -> R.string.push_expires_week
     "push_expires_today" -> R.string.push_expires_today
+    "push_grew_up_you_title" -> R.string.push_grew_up_you_title
+    "push_grew_up_you" -> R.string.push_grew_up_you
+    "push_grew_up" -> R.string.push_grew_up
+    "push_emergency_asked" -> R.string.push_emergency_asked
+    "push_emergency_opened" -> R.string.push_emergency_opened
     else -> null
 }

@@ -72,7 +72,10 @@
     <string name="feature_family_invitation_declined">Declined the invitation to %1$s.</string>
     <string name="feature_family_space_gone">You are no longer in this space.</string>
     <string name="feature_family_members_title">Members</string>
-    <string name="feature_family_members_hint">Adults see everyone\'s documents. Children see only their own.</string>
+    <string name="feature_family_members_hint">Adults see everyone\'s documents. Children see only their own. Set a child\'s birthday and they become an adult on their 18th.</string>
+    <string name="feature_family_set_birthday">Birthday of %1$s</string>
+    <string name="feature_family_forget_birthday">Forget</string>
+    <string name="feature_family_child_until">Child until %1$s</string>
     <string name="feature_family_owner">Owner</string>
     <string name="feature_family_adult">Adult</string>
     <string name="feature_family_child">Child</string>
@@ -106,4 +109,6 @@
     <string name="feature_family_activity_deleted">%1$s deleted %2$s</string>
     <string name="feature_family_activity_pin_reset">%1$s gave %2$s a new PIN</string>
     <string name="feature_family_activity_shared">%1$s made a link to %2$s</string>
+    <string name="feature_family_activity_grew_up">%1$s turned 18 and is an adult now</string>
+    <string name="feature_family_activity_emergency">%1$s opened the documents of %2$s with emergency access</string>
 </resources>

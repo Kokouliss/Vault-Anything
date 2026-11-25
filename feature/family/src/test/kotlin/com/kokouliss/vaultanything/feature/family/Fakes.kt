@@ -64,6 +64,7 @@ internal class FakeSpaceRepository(initial: Space? = null) : SpaceRepository {
     override suspend fun removeMember(space: Space, memberId: String) = Unit
     override suspend fun resetInviteCode(space: Space) = Unit
     override suspend fun setRole(spaceId: String, memberId: String, role: Role) = Unit
+    override suspend fun setBirthday(spaceId: String, memberId: String, day: Long?) = Unit
     override suspend fun leaveSpace(spaceId: String) = Unit
     override suspend fun deleteSpace(space: Space) = Unit
 }
